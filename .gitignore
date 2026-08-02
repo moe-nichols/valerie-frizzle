@@ -1,0 +1,11 @@
+node_modules/
+out/
+dist/
+build/
+.env
+.env.local
+*.log
+.DS_Store
+.idea/
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

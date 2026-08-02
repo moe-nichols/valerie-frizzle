@@ -1,0 +1,35 @@
+name: sb-emulator-manager-test
+services:
+  emulator:
+    container_name: sb-emulator-test
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    pull_policy: missing
+    volumes:
+      - "./Config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
+    ports:
+      - "5673:5672"
+      - "5301:5300"
+    environment:
+      SQL_SERVER: sqledge
+      MSSQL_SA_PASSWORD: "${SQL_PASSWORD:-yourStrong(!)Password}"
+      ACCEPT_EULA: "${ACCEPT_EULA:-Y}"
+      EMULATOR_HTTP_PORT: "5300"
+    depends_on:
+      - sqledge
+    networks:
+      sb-emulator-test:
+        aliases:
+          - sb-emulator
+  sqledge:
+    container_name: sqledge-test
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    networks:
+      sb-emulator-test:
+        aliases:
+          - sqledge
+    environment:
+      ACCEPT_EULA: "${ACCEPT_EULA:-Y}"
+      MSSQL_SA_PASSWORD: "${SQL_PASSWORD:-yourStrong(!)Password}"
+
+networks:
+  sb-emulator-test:

@@ -1,0 +1,10 @@
+appId: com.sbemulatormanager.app
+productName: SB Emulator Manager
+directories:
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.*'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{docker,scripts,tests}/*'

@@ -1,0 +1,224 @@
+import { randomUUID } from 'node:crypto'
+import Long from 'long'
+import type { ServiceBusClient, ServiceBusReceivedMessage, ServiceBusReceiver } from '@azure/service-bus'
+import type {
+  MessageEnvelope,
+  ReceivedMessageDescription,
+  ReceiveMode,
+  ApplicationPropertyValue
+} from '@shared/domain'
+
+interface PeekLockHandle {
+  message: ServiceBusReceivedMessage
+  receiver: ServiceBusReceiver
+}
+
+function stringifyBody(body: unknown): string {
+  if (typeof body === 'string') return body
+  if (body === null || body === undefined) return ''
+  if (Buffer.isBuffer(body)) return body.toString('utf-8')
+  try {
+    return JSON.stringify(body)
+  } catch {
+    return String(body)
+  }
+}
+
+function toApplicationProperties(
+  properties: Record<string, unknown> | undefined
+): Record<string, ApplicationPropertyValue> | undefined {
+  if (!properties) return undefined
+  const result: Record<string, ApplicationPropertyValue> = {}
+  for (const [key, value] of Object.entries(properties)) {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      result[key] = value
+    } else {
+      result[key] = String(value)
+    }
+  }
+  return result
+}
+
+function toReceivedMessageDescription(
+  message: ServiceBusReceivedMessage,
+  handleId?: string
+): ReceivedMessageDescription {
+  return {
+    handleId,
+    sequenceNumber: message.sequenceNumber?.toNumber() ?? 0,
+    body: stringifyBody(message.body),
+    contentType: message.contentType,
+    subject: message.subject,
+    correlationId: message.correlationId !== undefined ? String(message.correlationId) : undefined,
+    messageId: message.messageId !== undefined ? String(message.messageId) : undefined,
+    replyTo: message.replyTo,
+    enqueuedTimeUtc: message.enqueuedTimeUtc?.toISOString(),
+    deliveryCount: message.deliveryCount,
+    applicationProperties: toApplicationProperties(message.applicationProperties),
+    deadLetterReason: message.deadLetterReason,
+    deadLetterErrorDescription: message.deadLetterErrorDescription
+  }
+}
+
+/**
+ * Wraps ServiceBusClient for send/peek/receive against a queue. Unlike AdminService,
+ * this holds real mutable state (open PeekLock receivers keyed by handle id) that must
+ * survive across separate IPC calls — a receive call hands back handle ids, and a later,
+ * separate complete/abandon/deadLetter call must settle the *same* underlying message on
+ * the *same* receiver (lock tokens and receiver objects can't cross IPC). Because of
+ * this, one MessagingService instance must live for the lifetime of a connected profile
+ * (see connectionManager.ts) rather than being constructed fresh per IPC request.
+ */
+export class MessagingService {
+  private peekLockHandles = new Map<string, PeekLockHandle>()
+  // Number of outstanding (not-yet-settled) handles per open PeekLock receiver. A single
+  // `receiveMessages` batch shares one receiver across all its messages, so the receiver
+  // must stay open until the *last* of them is settled — tracking a count (rather than
+  // rescanning peekLockHandles) makes closing safe even when settlements for the same
+  // batch overlap: each settle decrements exactly once, and only the one that brings the
+  // count to zero closes the receiver, after its own action has already resolved.
+  private receiverRefCounts = new Map<ServiceBusReceiver, number>()
+
+  constructor(private client: ServiceBusClient) {}
+
+  async sendMessage(entityPath: string, envelope: MessageEnvelope): Promise<void> {
+    const sender = this.client.createSender(entityPath)
+    try {
+      await sender.sendMessages({
+        body: envelope.body,
+        contentType: envelope.contentType,
+        subject: envelope.subject,
+        correlationId: envelope.correlationId,
+        messageId: envelope.messageId || randomUUID(),
+        replyTo: envelope.replyTo,
+        timeToLive: envelope.timeToLive,
+        applicationProperties: envelope.applicationProperties
+      })
+    } finally {
+      await sender.close()
+    }
+  }
+
+  async peekMessages(
+    entityPath: string,
+    maxCount: number,
+    fromSequenceNumber?: number
+  ): Promise<ReceivedMessageDescription[]> {
+    const receiver = this.client.createReceiver(entityPath)
+    try {
+      const messages = await receiver.peekMessages(maxCount, {
+        fromSequenceNumber:
+          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
+      })
+      return messages.map((message) => toReceivedMessageDescription(message))
+    } finally {
+      await receiver.close()
+    }
+  }
+
+  async receiveMessages(
+    entityPath: string,
+    maxCount: number,
+    mode: ReceiveMode,
+    maxWaitTimeMs: number
+  ): Promise<ReceivedMessageDescription[]> {
+    const receiver = this.client.createReceiver(entityPath, { receiveMode: mode })
+
+    if (mode === 'receiveAndDelete') {
+      try {
+        const messages = await receiver.receiveMessages(maxCount, { maxWaitTimeInMs: maxWaitTimeMs })
+        return messages.map((message) => toReceivedMessageDescription(message))
+      } finally {
+        await receiver.close()
+      }
+    }
+
+    // PeekLock: keep the receiver open and stash a handle per message so the renderer can
+    // settle it later via a separate IPC call. But if the receive throws, or returns no
+    // messages, there's nothing to settle — so the receiver would otherwise leak (an open
+    // AMQP link that close() below can't reclaim, since it only walks live handles). Close
+    // it in those cases; only keep it open once at least one handle actually references it.
+    let messages: ServiceBusReceivedMessage[]
+    try {
+      messages = await receiver.receiveMessages(maxCount, { maxWaitTimeInMs: maxWaitTimeMs })
+    } catch (err) {
+      await receiver.close()
+      throw err
+    }
+
+    if (messages.length === 0) {
+      await receiver.close()
+      return []
+    }
+
+    this.receiverRefCounts.set(receiver, messages.length)
+    return messages.map((message) => {
+      const handleId = randomUUID()
+      this.peekLockHandles.set(handleId, { message, receiver })
+      return toReceivedMessageDescription(message, handleId)
+    })
+  }
+
+  private async settle(
+    handleId: string,
+    action: (message: ServiceBusReceivedMessage, receiver: ServiceBusReceiver) => Promise<void>
+  ): Promise<void> {
+    const handle = this.peekLockHandles.get(handleId)
+    if (!handle) {
+      throw new Error(
+        `no such message handle (it may have already been settled, or its lock expired): ${handleId}`
+      )
+    }
+    // Remove the handle up front so it can't be settled twice, but decrement the receiver's
+    // ref count only after the action resolves — otherwise a concurrent settle of a sibling
+    // message could bring the count to zero and close the receiver while this action is
+    // still in flight. The decrement runs even if `action` throws (e.g. an expired lock):
+    // the handle is already gone, so the receiver must still be released once drained.
+    this.peekLockHandles.delete(handleId)
+    try {
+      await action(handle.message, handle.receiver)
+    } finally {
+      await this.releaseReceiver(handle.receiver)
+    }
+  }
+
+  /** Decrements the receiver's outstanding-handle count and closes it once it reaches zero.
+   * Called exactly once per settled handle. */
+  private async releaseReceiver(receiver: ServiceBusReceiver): Promise<void> {
+    const remaining = (this.receiverRefCounts.get(receiver) ?? 1) - 1
+    if (remaining <= 0) {
+      this.receiverRefCounts.delete(receiver)
+      await receiver.close()
+    } else {
+      this.receiverRefCounts.set(receiver, remaining)
+    }
+  }
+
+  async completeMessage(handleId: string): Promise<void> {
+    await this.settle(handleId, (message, receiver) => receiver.completeMessage(message))
+  }
+
+  async abandonMessage(handleId: string): Promise<void> {
+    await this.settle(handleId, (message, receiver) => receiver.abandonMessage(message))
+  }
+
+  async deadLetterMessage(handleId: string, reason: string, description: string): Promise<void> {
+    await this.settle(handleId, (message, receiver) =>
+      receiver.deadLetterMessage(message, {
+        deadLetterReason: reason,
+        deadLetterErrorDescription: description
+      })
+    )
+  }
+
+  /** Closes every receiver still open due to unsettled PeekLock handles — called when the
+   * owning profile disconnects. Drives off the ref-count map (the authoritative set of open
+   * receivers) rather than the handle map, so a receiver whose handles have all expired but
+   * were never settled is still reclaimed. */
+  async close(): Promise<void> {
+    const receivers = [...this.receiverRefCounts.keys()]
+    this.peekLockHandles.clear()
+    this.receiverRefCounts.clear()
+    await Promise.all(receivers.map((receiver) => receiver.close()))
+  }
+}

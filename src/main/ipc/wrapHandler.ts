@@ -1,0 +1,70 @@
+import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import log from 'electron-log/main'
+import { ZodError, type ZodType } from 'zod'
+import type { Result } from '@shared/errors'
+import type { IpcChannels } from '@shared/ipc-contract'
+import { ipcRequestSchemas } from '@shared/ipc-schemas'
+
+/** Runs fn and converts a thrown error into a Result — handlers should never let a raw
+ * Error cross the IPC boundary, since Electron serializes thrown Errors lossily. Every
+ * IPC call in the app funnels through here (via registerHandler), so it's also the single
+ * place that logs every real user-facing failure (validation/connection/CRUD/messaging/
+ * purge/resubmit errors) — the only place that matters for a packaged build with no
+ * attached terminal. */
+export async function toResult<T>(fn: () => Promise<T> | T): Promise<Result<T>> {
+  try {
+    return { ok: true, data: await fn() }
+  } catch (err) {
+    log.error(err instanceof Error ? err : new Error(String(err)))
+    if (err instanceof ZodError) {
+      return {
+        ok: false,
+        error: { code: 'VALIDATION_ERROR', message: `invalid request: ${formatZodError(err)}` }
+      }
+    }
+    return {
+      ok: false,
+      error: { code: 'UNEXPECTED_ERROR', message: err instanceof Error ? err.message : String(err) }
+    }
+  }
+}
+
+function formatZodError(err: ZodError): string {
+  return err.issues
+    .map((issue) => {
+      const path = issue.path.join('.')
+      return path ? `${path}: ${issue.message}` : issue.message
+    })
+    .join('; ')
+}
+
+/** What a handler must return for a given channel — the `T` inside its `Result<T>`
+ * response. Handlers return the raw data; registerHandler wraps it in a Result (and turns
+ * thrown errors into error Results) via toResult. */
+type ResponseData<K extends keyof IpcChannels> =
+  IpcChannels[K]['response'] extends Result<infer T> ? T : never
+
+type ChannelHandler<K extends keyof IpcChannels> = (
+  request: IpcChannels[K]['request'],
+  event: IpcMainInvokeEvent
+) => Promise<ResponseData<K>> | ResponseData<K>
+
+/**
+ * Registers an ipcMain handler for a channel with two guarantees baked in: the incoming
+ * payload is validated against the channel's zod schema before the handler runs (a bad
+ * payload becomes a VALIDATION_ERROR Result, never an SDK call), and the handler's return
+ * value / thrown error is funnelled through toResult. Handlers therefore deal only in
+ * validated requests and plain return values.
+ */
+export function registerHandler<K extends keyof IpcChannels>(
+  channel: K,
+  handler: ChannelHandler<K>
+): void {
+  const schema = ipcRequestSchemas[channel] as ZodType<IpcChannels[K]['request']>
+  ipcMain.handle(channel, (event, rawRequest): Promise<IpcChannels[K]['response']> => {
+    return toResult(() => {
+      const request = schema.parse(rawRequest)
+      return handler(request, event)
+    }) as Promise<IpcChannels[K]['response']>
+  })
+}
