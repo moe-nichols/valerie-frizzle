@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { ServiceBusAdministrationClient, ServiceBusClient } from "@azure/service-bus";
-import { startAdminHttpsProxy, buildAdminConnectionString, type AdminHttpsProxy } from "../../src/main/services/adminHttpsProxy.ts";
-import { AdminService } from "../../src/main/services/adminService.ts";
-import { MessagingService } from "../../src/main/services/messagingService.ts";
-import { purgeEntity, type PurgeProgress } from "../../src/main/services/purgeService.ts";
-import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from "./harness.ts";
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus'
+import { startAdminHttpsProxy, buildAdminConnectionString, type AdminHttpsProxy } from '../../src/main/services/adminHttpsProxy'
+import { AdminService } from '../../src/main/services/adminService'
+import { MessagingService } from '../../src/main/services/messagingService'
+import { purgeEntity, type PurgeProgress } from '../../src/main/services/purgeService'
+import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from './harness'
 
 let proxy: AdminHttpsProxy;
 let adminService: AdminService;

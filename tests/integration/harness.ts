@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 // Drives docker compose directly rather than via testcontainers-node, which has open,
 // unresolved GitHub issues around Docker-runtime-detection failing specifically under

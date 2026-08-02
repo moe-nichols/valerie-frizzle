@@ -1,12 +1,12 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createDatabase } from "../../src/main/services/db/database.ts";
-import { ProfilesRepo } from "../../src/main/services/db/profilesRepo.ts";
-import { ConnectionManager } from "../../src/main/services/connectionManager.ts";
-import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from "./harness.ts";
-import type Database from "better-sqlite3";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createDatabase } from '../../src/main/services/db/database'
+import { ProfilesRepo } from '../../src/main/services/db/profilesRepo'
+import { ConnectionManager } from '../../src/main/services/connectionManager'
+import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from './harness'
+import type Database from 'better-sqlite3'
 
 let tempDir: string;
 let db: Database.Database;

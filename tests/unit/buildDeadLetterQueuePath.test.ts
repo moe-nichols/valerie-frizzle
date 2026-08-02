@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { buildDeadLetterQueuePath } from "../../src/shared/domain.ts";
+import { describe, expect, test } from 'vitest'
+import { buildDeadLetterQueuePath } from '../../src/shared/domain'
 
 describe("buildDeadLetterQueuePath", () => {
   test("appends the $DeadLetterQueue sub-queue suffix", () => {

@@ -5,6 +5,7 @@ build/
 .env
 .env.local
 *.log
+*.tsbuildinfo
 .DS_Store
 .idea/
 .claude/scheduled_tasks.lock

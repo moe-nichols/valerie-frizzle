@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { buildAdminConnectionString } from "../../src/main/services/adminHttpsProxy.ts";
+import { describe, expect, test } from 'vitest'
+import { buildAdminConnectionString } from '../../src/main/services/adminHttpsProxy'
 
 describe("buildAdminConnectionString", () => {
   test("replaces the Endpoint with the proxy URL and preserves other params", () => {

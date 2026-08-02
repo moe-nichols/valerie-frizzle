@@ -1,4 +1,4 @@
-import { startEmulator, stopEmulator } from "./harness.ts";
+import { startEmulator, stopEmulator } from './harness'
 
 export default async function setup() {
   await startEmulator();

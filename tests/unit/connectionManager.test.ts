@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
-import type { ProfilesRepo } from "../../src/main/services/db/profilesRepo.ts";
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { ProfilesRepo } from '../../src/main/services/db/profilesRepo'
 
 // Module mocks are hoisted above imports by vitest; the mocked members below are declared
 // with `vi.hoisted` so they can be referenced from both the factory and the tests.
@@ -29,7 +29,7 @@ vi.mock("../../src/main/services/messagingService.ts", () => ({
   },
 }));
 
-import { ConnectionManager } from "../../src/main/services/connectionManager.ts";
+import { ConnectionManager } from '../../src/main/services/connectionManager'
 
 function fakeProfilesRepo(): ProfilesRepo {
   return {

@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { ipcRequestSchemas } from "../../src/shared/ipc-schemas.ts";
+import { describe, expect, test } from 'vitest'
+import { ipcRequestSchemas } from '../../src/shared/ipc-schemas'
 
 describe("ipcRequestSchemas", () => {
   test("rejects a negative maxCount on messages:peek (F4)", () => {

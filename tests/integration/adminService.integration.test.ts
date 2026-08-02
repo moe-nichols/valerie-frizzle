@@ -1,8 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { ServiceBusAdministrationClient } from "@azure/service-bus";
-import { startAdminHttpsProxy, buildAdminConnectionString, type AdminHttpsProxy } from "../../src/main/services/adminHttpsProxy.ts";
-import { AdminService } from "../../src/main/services/adminService.ts";
-import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from "./harness.ts";
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { ServiceBusAdministrationClient } from '@azure/service-bus'
+import { startAdminHttpsProxy, buildAdminConnectionString, type AdminHttpsProxy } from '../../src/main/services/adminHttpsProxy'
+import { AdminService } from '../../src/main/services/adminService'
+import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from './harness'
 
 // Note: `maxSizeInMegabytes` is deliberately not asserted on anywhere in this file —
 // confirmed via direct investigation that the emulator ignores it at both create and

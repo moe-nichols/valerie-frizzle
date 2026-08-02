@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { isPurgeComplete } from "../../src/main/services/purgeService.ts";
+import { describe, expect, test } from 'vitest'
+import { isPurgeComplete } from '../../src/main/services/purgeService'
 
 describe("isPurgeComplete", () => {
   test("is not complete after zero or one empty batch", () => {

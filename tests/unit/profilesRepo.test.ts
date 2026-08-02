@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createDatabase } from "../../src/main/services/db/database.ts";
-import { ProfilesRepo } from "../../src/main/services/db/profilesRepo.ts";
-import type Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createDatabase } from '../../src/main/services/db/database'
+import { ProfilesRepo } from '../../src/main/services/db/profilesRepo'
+import type Database from 'better-sqlite3'
 
 let tempDir: string;
 let db: Database.Database;

@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vitest";
-import { buildResubmitEnvelope } from "../../src/main/services/replayService.ts";
-import type { ReceivedMessageDescription } from "../../src/shared/domain.ts";
+import { describe, expect, test } from 'vitest'
+import { buildResubmitEnvelope } from '../../src/main/services/replayService'
+import type { ReceivedMessageDescription } from '../../src/shared/domain'
 
 const deadLetteredMessage: ReceivedMessageDescription = {
   handleId: "handle-1",

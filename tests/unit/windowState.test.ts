@@ -1,9 +1,9 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test } from 'vitest'
 import {
   parseWindowState,
   clampToVisibleDisplay,
   DEFAULT_WINDOW_STATE,
-} from "../../src/main/services/windowState.ts";
+} from '../../src/main/services/windowState'
 
 describe("parseWindowState", () => {
   test("falls back to defaults when nothing is saved", () => {

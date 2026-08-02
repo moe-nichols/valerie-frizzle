@@ -1,7 +1,7 @@
-import { describe, expect, test } from "vitest";
-import type { ReceivedMessageDescription } from "@shared/domain";
-import type { MessagingService } from "../../src/main/services/messagingService.ts";
-import { purgeEntity, type PurgeProgress } from "../../src/main/services/purgeService.ts";
+import { describe, expect, test } from 'vitest'
+import type { ReceivedMessageDescription } from '@shared/domain'
+import type { MessagingService } from '../../src/main/services/messagingService'
+import { purgeEntity, type PurgeProgress } from '../../src/main/services/purgeService'
 
 function msg(sequenceNumber: number): ReceivedMessageDescription {
   return { sequenceNumber, body: "" };

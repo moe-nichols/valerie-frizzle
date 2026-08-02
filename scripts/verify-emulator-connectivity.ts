@@ -13,8 +13,8 @@
 // Prerequisite: the emulator must already be running, e.g.
 //   docker compose -f docker/servicebus-emulator/docker-compose.yml up -d
 
-import { ServiceBusAdministrationClient, ServiceBusClient } from "@azure/service-bus";
-import { startAdminHttpsProxy, buildAdminConnectionString } from "../src/main/services/adminHttpsProxy.ts";
+import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus'
+import { startAdminHttpsProxy, buildAdminConnectionString } from '../src/main/services/adminHttpsProxy'
 
 const MESSAGING_CONNECTION_STRING =
   "Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;";

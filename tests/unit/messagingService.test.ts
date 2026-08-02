@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vitest";
-import type { ServiceBusClient, ServiceBusReceivedMessage } from "@azure/service-bus";
-import { MessagingService } from "../../src/main/services/messagingService.ts";
+import { describe, expect, test } from 'vitest'
+import type { ServiceBusClient, ServiceBusReceivedMessage } from '@azure/service-bus'
+import { MessagingService } from '../../src/main/services/messagingService'
 
 interface Deferred {
   promise: Promise<void>;

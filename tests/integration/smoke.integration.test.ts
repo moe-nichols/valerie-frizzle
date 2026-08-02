@@ -1,7 +1,7 @@
-import { expect, test } from "vitest";
-import { ServiceBusAdministrationClient } from "@azure/service-bus";
-import { startAdminHttpsProxy, buildAdminConnectionString } from "../../src/main/services/adminHttpsProxy.ts";
-import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from "./harness.ts";
+import { expect, test } from 'vitest'
+import { ServiceBusAdministrationClient } from '@azure/service-bus'
+import { startAdminHttpsProxy, buildAdminConnectionString } from '../../src/main/services/adminHttpsProxy'
+import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from './harness'
 
 test("connects to the real emulator via the admin proxy and lists queues", async () => {
   const proxy = await startAdminHttpsProxy(TEST_MANAGEMENT_PORT);

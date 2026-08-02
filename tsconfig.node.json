@@ -3,6 +3,7 @@
   "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*"],
   "compilerOptions": {
     "composite": false,
+    "noEmit": true,
     "types": ["electron-vite/node"],
     "paths": {
       "@shared/*": ["./src/shared/*"]
