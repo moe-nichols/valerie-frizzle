@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { PURGE_PROGRESS_CHANNEL, type IpcChannels, type PurgeProgressEvent } from '../shared/ipc-contract'
+import { PURGE_PROGRESS_CHANNEL, type IpcChannels, type PurgeProgressEvent } from '@shared/ipc-contract'
 
 function invoke<K extends keyof IpcChannels>(
   channel: K,
