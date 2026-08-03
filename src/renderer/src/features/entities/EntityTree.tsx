@@ -1,8 +1,3 @@
-import { useEffect, useState } from 'react'
-import { MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
-import type { QueueDescription, TopicDescription } from '@shared/domain'
-import { buildDeadLetterQueuePath } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import {
   AlertDialog,
@@ -43,6 +38,11 @@ import {
   topicSelected
 } from '@renderer/store/connectionsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
+import type { QueueDescription, TopicDescription } from '@shared/domain'
+import { buildDeadLetterQueuePath } from '@shared/domain'
+import { MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { CreateQueueDialog } from './CreateQueueDialog'
 import { CreateTopicDialog } from './CreateTopicDialog'
 import { EditQueueDialog, EditTopicDialog } from './EditEntityDialogs'
@@ -85,12 +85,8 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
     dispatch(
       entitiesRefreshed({
         profileId,
-        queueNames: queuesResponse.ok
-          ? queuesResponse.data.map((queue) => queue.name)
-          : undefined,
-        topicNames: topicsResponse.ok
-          ? topicsResponse.data.map((topic) => topic.name)
-          : undefined
+        queueNames: queuesResponse.ok ? queuesResponse.data.map((queue) => queue.name) : undefined,
+        topicNames: topicsResponse.ok ? topicsResponse.data.map((topic) => topic.name) : undefined
       })
     )
     // A single error is set at the end so one list's success doesn't wipe the other's
@@ -143,7 +139,9 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         : await window.sbAdmin.entities.topics.delete(profileId, name)
 
     if (response.ok) {
-      dispatch(kind === 'queue' ? queueDeleted({ profileId, name }) : topicDeleted({ profileId, name }))
+      dispatch(
+        kind === 'queue' ? queueDeleted({ profileId, name }) : topicDeleted({ profileId, name })
+      )
       await refresh()
     } else {
       setError(response.error.message)
@@ -206,11 +204,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
               </Badge>
             )}
             {queueDlqCounts[queue.name] && queueDlqCounts[queue.name].count > 0 && (
-              <Badge
-                variant="destructive"
-                className="shrink-0"
-                title="Dead-lettered messages"
-              >
+              <Badge variant="destructive" className="shrink-0" title="Dead-lettered messages">
                 {formatMessageCount(queueDlqCounts[queue.name])} DLQ
               </Badge>
             )}

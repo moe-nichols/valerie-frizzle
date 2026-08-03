@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
 import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import { usePolling } from '@renderer/lib/usePolling'
 import { useAppSelector } from '@renderer/store/hooks'
+import { useEffect } from 'react'
 
 /**
  * Shared scaffolding for the entity detail panels (QueuePanel/TopicPanel), which render

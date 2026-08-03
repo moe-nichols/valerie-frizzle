@@ -1,4 +1,3 @@
-import { useEffect, useState, type FormEvent } from 'react'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -11,7 +10,6 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
-import { MAX_POLL_INTERVAL_MS, MIN_POLL_INTERVAL_MS } from '@shared/pollInterval'
 import {
   Select,
   SelectContent,
@@ -19,8 +17,10 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
-import { updatePollInterval, updateTheme } from '@renderer/store/settingsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
+import { updatePollInterval, updateTheme } from '@renderer/store/settingsSlice'
+import { MAX_POLL_INTERVAL_MS, MIN_POLL_INTERVAL_MS } from '@shared/pollInterval'
+import { type FormEvent, useEffect, useState } from 'react'
 
 const MIN_SECONDS = MIN_POLL_INTERVAL_MS / 1000
 const MAX_SECONDS = MAX_POLL_INTERVAL_MS / 1000

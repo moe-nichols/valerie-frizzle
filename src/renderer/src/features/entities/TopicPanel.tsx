@@ -1,22 +1,22 @@
-import { useState, type FormEvent } from 'react'
-import { RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
-import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
-import { Input } from '@renderer/components/ui/input'
-import { Label } from '@renderer/components/ui/label'
-import { fetchSubscriptionMessageCount, formatMessageCount } from '@renderer/lib/messageCount'
-import { useEntityCounts } from '@renderer/lib/useEntityCounts'
-import { MessageComposer } from '../messages/MessageComposer'
-import { EditSubscriptionDialog } from './EditEntityDialogs'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger
 } from '@renderer/components/ui/collapsible'
+import { Input } from '@renderer/components/ui/input'
+import { Label } from '@renderer/components/ui/label'
+import { fetchSubscriptionMessageCount, formatMessageCount } from '@renderer/lib/messageCount'
+import { useEntityCounts } from '@renderer/lib/useEntityCounts'
+import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
+import { RefreshCw } from 'lucide-react'
+import { type FormEvent, useState } from 'react'
+import { toast } from 'sonner'
+import { MessageComposer } from '../messages/MessageComposer'
+import { EditSubscriptionDialog } from './EditEntityDialogs'
 import {
   emptySubscriptionFields,
   SubscriptionFields,
@@ -214,7 +214,8 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                   {subscriptionDlqCounts[subscription.subscriptionName] &&
                     subscriptionDlqCounts[subscription.subscriptionName].count > 0 && (
                       <Badge variant="destructive" title="Dead-lettered messages">
-                        {formatMessageCount(subscriptionDlqCounts[subscription.subscriptionName])} DLQ
+                        {formatMessageCount(subscriptionDlqCounts[subscription.subscriptionName])}{' '}
+                        DLQ
                       </Badge>
                     )}
                   <Button

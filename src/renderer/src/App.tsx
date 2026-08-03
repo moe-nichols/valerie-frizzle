@@ -1,6 +1,3 @@
-import { useEffect } from 'react'
-import { Radio } from 'lucide-react'
-import { toast } from 'sonner'
 import {
   Sidebar,
   SidebarContent,
@@ -11,12 +8,15 @@ import {
   SidebarTrigger
 } from '@renderer/components/ui/sidebar'
 import { Toaster } from '@renderer/components/ui/sonner'
+import { Radio } from 'lucide-react'
+import { useEffect } from 'react'
+import { toast } from 'sonner'
 import { ConnectionSidebar } from './features/connections/ConnectionSidebar'
 import { QueuePanel } from './features/entities/QueuePanel'
 import { TopicPanel } from './features/entities/TopicPanel'
 import { SettingsButton } from './features/settings/SettingsButton'
-import { fetchPollInterval, fetchTheme } from './store/settingsSlice'
 import { useAppDispatch, useAppSelector } from './store/hooks'
+import { fetchPollInterval, fetchTheme } from './store/settingsSlice'
 
 function App(): React.JSX.Element {
   const dispatch = useAppDispatch()

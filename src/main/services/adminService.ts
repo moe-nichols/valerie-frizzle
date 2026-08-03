@@ -1,28 +1,28 @@
 import type {
-  ServiceBusAdministrationClient,
+  CorrelationRuleFilter,
   QueueProperties,
-  TopicProperties,
-  SubscriptionProperties,
   RuleProperties,
+  ServiceBusAdministrationClient,
   SqlRuleAction,
   SqlRuleFilter,
-  CorrelationRuleFilter
+  SubscriptionProperties,
+  TopicProperties
 } from '@azure/service-bus'
 import type {
-  QueueDescription,
   CreateQueueInput,
-  UpdateQueueInput,
-  TopicDescription,
-  CreateTopicInput,
-  UpdateTopicInput,
-  SubscriptionDescription,
-  CreateSubscriptionInput,
-  UpdateSubscriptionInput,
-  RuleDescription,
   CreateRuleInput,
-  UpdateRuleInput,
+  CreateSubscriptionInput,
+  CreateTopicInput,
+  QueueDescription,
+  RuleDescription,
   RuleFilterInput,
-  SqlRuleActionInput
+  SqlRuleActionInput,
+  SubscriptionDescription,
+  TopicDescription,
+  UpdateQueueInput,
+  UpdateRuleInput,
+  UpdateSubscriptionInput,
+  UpdateTopicInput
 } from '@shared/domain'
 
 function toQueueDescription(props: QueueProperties): QueueDescription {
@@ -235,7 +235,10 @@ export class AdminService {
     return subscriptions
   }
 
-  async getSubscription(topicName: string, subscriptionName: string): Promise<SubscriptionDescription> {
+  async getSubscription(
+    topicName: string,
+    subscriptionName: string
+  ): Promise<SubscriptionDescription> {
     return toSubscriptionDescription(await this.client.getSubscription(topicName, subscriptionName))
   }
 

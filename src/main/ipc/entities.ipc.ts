@@ -1,5 +1,5 @@
-import type { ConnectionManager } from '../services/connectionManager'
 import { AdminService } from '../services/adminService'
+import type { ConnectionManager } from '../services/connectionManager'
 import { registerHandler } from './wrapHandler'
 
 export function registerEntitiesIpcHandlers(connectionManager: ConnectionManager): void {

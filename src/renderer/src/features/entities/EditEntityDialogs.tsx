@@ -1,9 +1,3 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import type {
-  QueueDescription,
-  SubscriptionDescription,
-  TopicDescription
-} from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -13,16 +7,18 @@ import {
   DialogHeader,
   DialogTitle
 } from '@renderer/components/ui/dialog'
+import type { QueueDescription, SubscriptionDescription, TopicDescription } from '@shared/domain'
+import { type FormEvent, useEffect, useState } from 'react'
 import {
   QueueFields,
   queueFieldsFromDescription,
   SubscriptionFields,
   subscriptionFieldsFromDescription,
+  TopicFields,
+  topicFieldsFromDescription,
   toUpdateQueueInput,
   toUpdateSubscriptionInput,
-  toUpdateTopicInput,
-  TopicFields,
-  topicFieldsFromDescription
+  toUpdateTopicInput
 } from './entityForms'
 
 /**

@@ -1,6 +1,6 @@
-import type { Database } from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import type { ConnectionProfile } from '@shared/domain'
+import type { Database } from 'better-sqlite3'
 
 interface ProfileRow {
   id: string
@@ -45,9 +45,9 @@ export class ProfilesRepo {
   }
 
   get(id: string): ConnectionProfile | undefined {
-    const row = this.db
-      .prepare('SELECT * FROM connection_profiles WHERE id = ?')
-      .get(id) as ProfileRow | undefined
+    const row = this.db.prepare('SELECT * FROM connection_profiles WHERE id = ?').get(id) as
+      | ProfileRow
+      | undefined
     return row ? rowToProfile(row) : undefined
   }
 

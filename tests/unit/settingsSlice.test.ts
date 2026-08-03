@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { DEFAULT_POLL_INTERVAL_MS } from '../../src/shared/pollInterval'
 import {
   fetchPollInterval,
   settingsReducer,
   updatePollInterval
 } from '../../src/renderer/src/store/settingsSlice'
+import { DEFAULT_POLL_INTERVAL_MS } from '../../src/shared/pollInterval'
 
 describe('settingsSlice', () => {
   test('starts with the null "still loading" sentinel so polling stays idle', () => {

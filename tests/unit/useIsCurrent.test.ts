@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { describe, expect, test } from 'vitest'
+
 import { renderHook } from '@testing-library/react'
+import { describe, expect, test } from 'vitest'
 import { useIsCurrent } from '../../src/renderer/src/lib/useIsCurrent'
 
 describe('useIsCurrent', () => {

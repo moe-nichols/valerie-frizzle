@@ -1,4 +1,3 @@
-import { useState, type FormEvent } from 'react'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -15,6 +14,7 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
+import { type FormEvent, useState } from 'react'
 import { emptyQueueFields, QueueFields, toCreateQueueInput } from './entityForms'
 
 interface CreateQueueDialogProps {

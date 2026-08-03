@@ -1,5 +1,5 @@
-import { createServer, type Server } from 'node:https'
 import { request as httpRequest } from 'node:http'
+import { createServer, type Server } from 'node:https'
 import { generate } from 'selfsigned'
 
 // ServiceBusAdministrationClient (the JS/TS @azure/service-bus SDK) hardcodes `https://`
@@ -83,7 +83,9 @@ export function buildAdminConnectionString(
 ): string {
   const parts = messagingConnectionString.split(';').filter(Boolean)
   const rebuilt = parts.map((part) =>
-    part.startsWith('Endpoint=') ? `Endpoint=${adminProxyUrl.replace(/^https:\/\//, 'sb://')}` : part
+    part.startsWith('Endpoint=')
+      ? `Endpoint=${adminProxyUrl.replace(/^https:\/\//, 'sb://')}`
+      : part
   )
   return `${rebuilt.join(';')};`
 }

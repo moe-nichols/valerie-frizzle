@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import {
-  parsePollIntervalMs,
   clampPollIntervalMs,
   DEFAULT_POLL_INTERVAL_MS,
+  MAX_POLL_INTERVAL_MS,
   MIN_POLL_INTERVAL_MS,
-  MAX_POLL_INTERVAL_MS
+  parsePollIntervalMs
 } from '../../src/main/services/pollPreference'
 
 describe('parsePollIntervalMs', () => {

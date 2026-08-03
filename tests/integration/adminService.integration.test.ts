@@ -9,228 +9,231 @@ import { connectToTestEmulator, type TestEmulatorClient } from './testClient'
 // were both confirmed to apply correctly, so those are used instead to verify real
 // create/update semantics.
 
-let client: TestEmulatorClient;
-let adminService: AdminService;
+let client: TestEmulatorClient
+let adminService: AdminService
 
 beforeAll(async () => {
-  client = await connectToTestEmulator();
-  ({ adminService } = client);
-});
+  client = await connectToTestEmulator()
+  ;({ adminService } = client)
+})
 
 afterAll(async () => {
-  await client.close();
-});
+  await client.close()
+})
 
-describe("AdminService — queues", () => {
-  const queueName = `test-queue-${Date.now()}`;
+describe('AdminService — queues', () => {
+  const queueName = `test-queue-${Date.now()}`
 
-  test("create returns the created queue with the requested options applied", async () => {
-    const queue = await adminService.createQueue({ name: queueName, maxDeliveryCount: 7 });
-    expect(queue.name).toBe(queueName);
-    expect(queue.maxDeliveryCount).toBe(7);
-    expect(queue.status).toBe("Active");
-  });
+  test('create returns the created queue with the requested options applied', async () => {
+    const queue = await adminService.createQueue({ name: queueName, maxDeliveryCount: 7 })
+    expect(queue.name).toBe(queueName)
+    expect(queue.maxDeliveryCount).toBe(7)
+    expect(queue.status).toBe('Active')
+  })
 
-  test("get returns the same queue", async () => {
-    const queue = await adminService.getQueue(queueName);
-    expect(queue.name).toBe(queueName);
-  });
+  test('get returns the same queue', async () => {
+    const queue = await adminService.getQueue(queueName)
+    expect(queue.name).toBe(queueName)
+  })
 
-  test("list includes the created queue", async () => {
-    const queues = await adminService.listQueues();
-    expect(queues.map((q) => q.name)).toContain(queueName);
-  });
+  test('list includes the created queue', async () => {
+    const queues = await adminService.listQueues()
+    expect(queues.map((q) => q.name)).toContain(queueName)
+  })
 
   test("update changes only the requested field — despite the emulator's malformed update response", async () => {
     // This exercises adminService's runUpdateWithEmulatorParseWorkaround path: the SDK
     // throws a client-side PARSE_ERROR on this call even though the update succeeds
     // server-side, and adminService must recover by re-fetching rather than surfacing
     // the parse error as a failure.
-    const updated = await adminService.updateQueue(queueName, { maxDeliveryCount: 9 });
-    expect(updated.maxDeliveryCount).toBe(9);
-    expect(updated.name).toBe(queueName);
-  });
+    const updated = await adminService.updateQueue(queueName, { maxDeliveryCount: 9 })
+    expect(updated.maxDeliveryCount).toBe(9)
+    expect(updated.name).toBe(queueName)
+  })
 
-  test("delete removes the queue", async () => {
-    await adminService.deleteQueue(queueName);
-    const queues = await adminService.listQueues();
-    expect(queues.map((q) => q.name)).not.toContain(queueName);
-  });
-});
+  test('delete removes the queue', async () => {
+    await adminService.deleteQueue(queueName)
+    const queues = await adminService.listQueues()
+    expect(queues.map((q) => q.name)).not.toContain(queueName)
+  })
+})
 
-describe("AdminService — topics and subscriptions", () => {
-  const topicName = `test-topic-${Date.now()}`;
-  const subscriptionName = "test-subscription";
+describe('AdminService — topics and subscriptions', () => {
+  const topicName = `test-topic-${Date.now()}`
+  const subscriptionName = 'test-subscription'
 
   afterAll(async () => {
     // topic deletion cascades its subscriptions; clean up defensively either way
-    const topics = await adminService.listTopics();
+    const topics = await adminService.listTopics()
     if (topics.some((t) => t.name === topicName)) {
-      await adminService.deleteTopic(topicName);
+      await adminService.deleteTopic(topicName)
     }
-  });
+  })
 
-  test("create/get/list a topic", async () => {
-    const created = await adminService.createTopic({ name: topicName, defaultMessageTimeToLive: "PT30M" });
-    expect(created.name).toBe(topicName);
+  test('create/get/list a topic', async () => {
+    const created = await adminService.createTopic({
+      name: topicName,
+      defaultMessageTimeToLive: 'PT30M'
+    })
+    expect(created.name).toBe(topicName)
 
-    const fetched = await adminService.getTopic(topicName);
-    expect(fetched.defaultMessageTimeToLive).toBe("PT30M");
+    const fetched = await adminService.getTopic(topicName)
+    expect(fetched.defaultMessageTimeToLive).toBe('PT30M')
 
-    const topics = await adminService.listTopics();
-    expect(topics.map((t) => t.name)).toContain(topicName);
-  });
+    const topics = await adminService.listTopics()
+    expect(topics.map((t) => t.name)).toContain(topicName)
+  })
 
   test("update a topic — despite the emulator's malformed update response", async () => {
-    const updated = await adminService.updateTopic(topicName, { defaultMessageTimeToLive: "PT45M" });
-    expect(updated.defaultMessageTimeToLive).toBe("PT45M");
-  });
+    const updated = await adminService.updateTopic(topicName, { defaultMessageTimeToLive: 'PT45M' })
+    expect(updated.defaultMessageTimeToLive).toBe('PT45M')
+  })
 
-  test("create/get/list a subscription under the topic", async () => {
+  test('create/get/list a subscription under the topic', async () => {
     const created = await adminService.createSubscription({
       topicName,
       subscriptionName,
-      maxDeliveryCount: 5,
-    });
-    expect(created.subscriptionName).toBe(subscriptionName);
-    expect(created.topicName).toBe(topicName);
-    expect(created.maxDeliveryCount).toBe(5);
+      maxDeliveryCount: 5
+    })
+    expect(created.subscriptionName).toBe(subscriptionName)
+    expect(created.topicName).toBe(topicName)
+    expect(created.maxDeliveryCount).toBe(5)
 
-    const fetched = await adminService.getSubscription(topicName, subscriptionName);
-    expect(fetched.subscriptionName).toBe(subscriptionName);
+    const fetched = await adminService.getSubscription(topicName, subscriptionName)
+    expect(fetched.subscriptionName).toBe(subscriptionName)
 
-    const subscriptions = await adminService.listSubscriptions(topicName);
-    expect(subscriptions.map((s) => s.subscriptionName)).toContain(subscriptionName);
-  });
+    const subscriptions = await adminService.listSubscriptions(topicName)
+    expect(subscriptions.map((s) => s.subscriptionName)).toContain(subscriptionName)
+  })
 
-  test("update a subscription", async () => {
+  test('update a subscription', async () => {
     const updated = await adminService.updateSubscription(topicName, subscriptionName, {
-      maxDeliveryCount: 8,
-    });
-    expect(updated.maxDeliveryCount).toBe(8);
-  });
+      maxDeliveryCount: 8
+    })
+    expect(updated.maxDeliveryCount).toBe(8)
+  })
 
-  test("delete a subscription", async () => {
-    await adminService.deleteSubscription(topicName, subscriptionName);
-    const subscriptions = await adminService.listSubscriptions(topicName);
-    expect(subscriptions.map((s) => s.subscriptionName)).not.toContain(subscriptionName);
-  });
+  test('delete a subscription', async () => {
+    await adminService.deleteSubscription(topicName, subscriptionName)
+    const subscriptions = await adminService.listSubscriptions(topicName)
+    expect(subscriptions.map((s) => s.subscriptionName)).not.toContain(subscriptionName)
+  })
 
-  test("delete the topic", async () => {
-    await adminService.deleteTopic(topicName);
-    const topics = await adminService.listTopics();
-    expect(topics.map((t) => t.name)).not.toContain(topicName);
-  });
-});
+  test('delete the topic', async () => {
+    await adminService.deleteTopic(topicName)
+    const topics = await adminService.listTopics()
+    expect(topics.map((t) => t.name)).not.toContain(topicName)
+  })
+})
 
-describe("AdminService — rules", () => {
-  const topicName = `test-rules-topic-${Date.now()}`;
-  const subscriptionName = "test-rules-subscription";
+describe('AdminService — rules', () => {
+  const topicName = `test-rules-topic-${Date.now()}`
+  const subscriptionName = 'test-rules-subscription'
 
   beforeAll(async () => {
-    await adminService.createTopic({ name: topicName });
-    await adminService.createSubscription({ topicName, subscriptionName });
-  });
+    await adminService.createTopic({ name: topicName })
+    await adminService.createSubscription({ topicName, subscriptionName })
+  })
 
   afterAll(async () => {
-    await adminService.deleteTopic(topicName);
-  });
+    await adminService.deleteTopic(topicName)
+  })
 
-  test("a new subscription already has the auto-created $Default rule", async () => {
-    const rules = await adminService.listRules(topicName, subscriptionName);
-    expect(rules.map((r) => r.name)).toContain("$Default");
-  });
+  test('a new subscription already has the auto-created $Default rule', async () => {
+    const rules = await adminService.listRules(topicName, subscriptionName)
+    expect(rules.map((r) => r.name)).toContain('$Default')
+  })
 
-  test("create a SQL rule", async () => {
+  test('create a SQL rule', async () => {
     const rule = await adminService.createRule({
       topicName,
       subscriptionName,
-      name: "sql-rule",
-      filter: { type: "Sql", sqlExpression: "sys.Label = 'urgent'" },
-    });
-    expect(rule.name).toBe("sql-rule");
-    expect(rule.filter).toEqual({ type: "Sql", sqlExpression: "sys.Label = 'urgent'" });
+      name: 'sql-rule',
+      filter: { type: 'Sql', sqlExpression: "sys.Label = 'urgent'" }
+    })
+    expect(rule.name).toBe('sql-rule')
+    expect(rule.filter).toEqual({ type: 'Sql', sqlExpression: "sys.Label = 'urgent'" })
 
-    const rules = await adminService.listRules(topicName, subscriptionName);
-    expect(rules.map((r) => r.name)).toContain("sql-rule");
-  });
+    const rules = await adminService.listRules(topicName, subscriptionName)
+    expect(rules.map((r) => r.name)).toContain('sql-rule')
+  })
 
-  test("create a correlation rule", async () => {
+  test('create a correlation rule', async () => {
     const rule = await adminService.createRule({
       topicName,
       subscriptionName,
-      name: "correlation-rule",
-      filter: { type: "Correlation", correlationId: "abc-123", subject: "orders" },
-    });
-    expect(rule.name).toBe("correlation-rule");
+      name: 'correlation-rule',
+      filter: { type: 'Correlation', correlationId: 'abc-123', subject: 'orders' }
+    })
+    expect(rule.name).toBe('correlation-rule')
     expect(rule.filter).toMatchObject({
-      type: "Correlation",
-      correlationId: "abc-123",
-      subject: "orders",
-    });
+      type: 'Correlation',
+      correlationId: 'abc-123',
+      subject: 'orders'
+    })
 
-    const rules = await adminService.listRules(topicName, subscriptionName);
-    expect(rules.map((r) => r.name)).toContain("correlation-rule");
-  });
+    const rules = await adminService.listRules(topicName, subscriptionName)
+    expect(rules.map((r) => r.name)).toContain('correlation-rule')
+  })
 
-  test("list reflects all rules created so far", async () => {
-    const rules = await adminService.listRules(topicName, subscriptionName);
+  test('list reflects all rules created so far', async () => {
+    const rules = await adminService.listRules(topicName, subscriptionName)
     expect(rules.map((r) => r.name).sort()).toEqual(
-      ["$Default", "correlation-rule", "sql-rule"].sort()
-    );
-  });
+      ['$Default', 'correlation-rule', 'sql-rule'].sort()
+    )
+  })
 
-  test("delete removes a rule", async () => {
-    await adminService.deleteRule(topicName, subscriptionName, "sql-rule");
-    const rules = await adminService.listRules(topicName, subscriptionName);
-    expect(rules.map((r) => r.name)).not.toContain("sql-rule");
-    expect(rules.map((r) => r.name)).toContain("correlation-rule");
-  });
-});
+  test('delete removes a rule', async () => {
+    await adminService.deleteRule(topicName, subscriptionName, 'sql-rule')
+    const rules = await adminService.listRules(topicName, subscriptionName)
+    expect(rules.map((r) => r.name)).not.toContain('sql-rule')
+    expect(rules.map((r) => r.name)).toContain('correlation-rule')
+  })
+})
 
-describe("AdminService — rule actions and updates", () => {
-  const topicName = `test-rule-actions-topic-${Date.now()}`;
-  const subscriptionName = "test-rule-actions-sub";
+describe('AdminService — rule actions and updates', () => {
+  const topicName = `test-rule-actions-topic-${Date.now()}`
+  const subscriptionName = 'test-rule-actions-sub'
 
   beforeAll(async () => {
-    await adminService.createTopic({ name: topicName });
-    await adminService.createSubscription({ topicName, subscriptionName });
-  });
+    await adminService.createTopic({ name: topicName })
+    await adminService.createSubscription({ topicName, subscriptionName })
+  })
 
   afterAll(async () => {
-    await adminService.deleteTopic(topicName);
-  });
+    await adminService.deleteTopic(topicName)
+  })
 
-  test("create a rule with a SQL action round-trips the action", async () => {
+  test('create a rule with a SQL action round-trips the action', async () => {
     const rule = await adminService.createRule({
       topicName,
       subscriptionName,
-      name: "action-rule",
-      filter: { type: "Sql", sqlExpression: "sys.Label = 'urgent'" },
-      action: { sqlExpression: "SET sys.Label = 'HANDLED'" },
-    });
-    expect(rule.action).toEqual({ sqlExpression: "SET sys.Label = 'HANDLED'" });
+      name: 'action-rule',
+      filter: { type: 'Sql', sqlExpression: "sys.Label = 'urgent'" },
+      action: { sqlExpression: "SET sys.Label = 'HANDLED'" }
+    })
+    expect(rule.action).toEqual({ sqlExpression: "SET sys.Label = 'HANDLED'" })
 
-    const rules = await adminService.listRules(topicName, subscriptionName);
-    expect(rules.find((r) => r.name === "action-rule")?.action).toEqual({
-      sqlExpression: "SET sys.Label = 'HANDLED'",
-    });
-  });
+    const rules = await adminService.listRules(topicName, subscriptionName)
+    expect(rules.find((r) => r.name === 'action-rule')?.action).toEqual({
+      sqlExpression: "SET sys.Label = 'HANDLED'"
+    })
+  })
 
   test("update replaces a rule's filter and action", async () => {
     const updated = await adminService.updateRule({
       topicName,
       subscriptionName,
-      name: "action-rule",
-      filter: { type: "Sql", sqlExpression: "sys.Label = 'calm'" },
-      action: { sqlExpression: "SET sys.Label = 'DONE'" },
-    });
-    expect(updated.filter).toEqual({ type: "Sql", sqlExpression: "sys.Label = 'calm'" });
-    expect(updated.action).toEqual({ sqlExpression: "SET sys.Label = 'DONE'" });
+      name: 'action-rule',
+      filter: { type: 'Sql', sqlExpression: "sys.Label = 'calm'" },
+      action: { sqlExpression: "SET sys.Label = 'DONE'" }
+    })
+    expect(updated.filter).toEqual({ type: 'Sql', sqlExpression: "sys.Label = 'calm'" })
+    expect(updated.action).toEqual({ sqlExpression: "SET sys.Label = 'DONE'" })
 
-    const rules = await adminService.listRules(topicName, subscriptionName);
-    const found = rules.find((r) => r.name === "action-rule");
-    expect(found?.filter).toEqual({ type: "Sql", sqlExpression: "sys.Label = 'calm'" });
-    expect(found?.action).toEqual({ sqlExpression: "SET sys.Label = 'DONE'" });
-  });
-});
+    const rules = await adminService.listRules(topicName, subscriptionName)
+    const found = rules.find((r) => r.name === 'action-rule')
+    expect(found?.filter).toEqual({ type: 'Sql', sqlExpression: "sys.Label = 'calm'" })
+    expect(found?.action).toEqual({ sqlExpression: "SET sys.Label = 'DONE'" })
+  })
+})

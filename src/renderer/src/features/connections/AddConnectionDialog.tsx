@@ -1,4 +1,3 @@
-import { useState, type FormEvent } from 'react'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -13,6 +12,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { createProfile } from '@renderer/store/connectionsSlice'
 import { useAppDispatch } from '@renderer/store/hooks'
+import { type FormEvent, useState } from 'react'
 
 interface AddConnectionDialogProps {
   open: boolean

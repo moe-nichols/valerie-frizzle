@@ -1,13 +1,13 @@
-import { resolve } from "node:path";
-import { defineConfig } from "vitest/config";
+import { resolve } from 'node:path'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   resolve: {
     alias: {
-      "@shared": resolve("src/shared")
+      '@shared': resolve('src/shared')
     }
   },
   test: {
-    include: ["tests/unit/**/*.test.ts"],
-  },
-});
+    include: ['tests/unit/**/*.test.ts']
+  }
+})

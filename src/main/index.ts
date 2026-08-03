@@ -1,12 +1,12 @@
-import { app, shell, screen, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { electronApp, is, optimizer } from '@electron-toolkit/utils'
+import { app, BrowserWindow, screen, shell } from 'electron'
 import log from 'electron-log/main'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/register'
-import { createDatabase } from './services/db/database'
-import { ProfilesRepo } from './services/db/profilesRepo'
-import { PreferencesRepo } from './services/db/preferencesRepo'
 import { ConnectionManager } from './services/connectionManager'
+import { createDatabase } from './services/db/database'
+import { PreferencesRepo } from './services/db/preferencesRepo'
+import { ProfilesRepo } from './services/db/profilesRepo'
 import { loadWindowState, saveWindowState } from './services/windowState'
 
 // Main-process-only: renderer errors already surface in devtools during dev, and wiring

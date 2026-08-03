@@ -58,10 +58,7 @@ export function parseWindowState(raw: string | undefined): WindowState {
  * window was last positioned on leaves it permanently off-screen and unreachable on the
  * next launch — a real Electron footgun, not a hypothetical one.
  */
-export function clampToVisibleDisplay(
-  state: WindowState,
-  displayBounds: Rectangle[]
-): WindowState {
+export function clampToVisibleDisplay(state: WindowState, displayBounds: Rectangle[]): WindowState {
   if (state.x === undefined || state.y === undefined) return state
 
   const onSomeDisplay = displayBounds.some(
@@ -77,13 +74,21 @@ export function clampToVisibleDisplay(
   return { width, height }
 }
 
-export function loadWindowState(preferencesRepo: PreferencesRepo, displayBounds: Rectangle[]): WindowState {
+export function loadWindowState(
+  preferencesRepo: PreferencesRepo,
+  displayBounds: Rectangle[]
+): WindowState {
   const raw = preferencesRepo.get(PREFERENCE_KEY)
   return clampToVisibleDisplay(parseWindowState(raw), displayBounds)
 }
 
 export function saveWindowState(preferencesRepo: PreferencesRepo, window: BrowserWindow): void {
   const bounds = window.getBounds()
-  const state: WindowState = { width: bounds.width, height: bounds.height, x: bounds.x, y: bounds.y }
+  const state: WindowState = {
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y
+  }
   preferencesRepo.set(PREFERENCE_KEY, JSON.stringify(state))
 }

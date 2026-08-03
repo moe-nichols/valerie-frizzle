@@ -1,9 +1,9 @@
-import { contextBridge, ipcRenderer } from 'electron'
 import {
-  PURGE_PROGRESS_CHANNEL,
   type IpcChannels,
+  PURGE_PROGRESS_CHANNEL,
   type PurgeProgressEvent
 } from '@shared/ipc-contract'
+import { contextBridge, ipcRenderer } from 'electron'
 import { createPurgeProgressHub } from './purgeProgressHub'
 
 // One persistent listener feeds the hub so events arriving before the renderer subscribes
@@ -185,10 +185,8 @@ const api = {
       invoke('messages:deadLetter', { profileId, handleId, reason, description }),
     purgeStart: (profileId: string, entityPath: string) =>
       invoke('messages:purge:start', { profileId, entityPath }),
-    onPurgeProgress: (
-      jobId: string,
-      callback: (event: PurgeProgressEvent) => void
-    ): (() => void) => purgeProgressHub.subscribe(jobId, callback),
+    onPurgeProgress: (jobId: string, callback: (event: PurgeProgressEvent) => void): (() => void) =>
+      purgeProgressHub.subscribe(jobId, callback),
     resubmit: (
       profileId: string,
       handleId: string,

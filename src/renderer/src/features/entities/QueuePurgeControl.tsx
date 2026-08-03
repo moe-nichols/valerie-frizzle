@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,6 +10,7 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { PEEK_COUNT_CAP, PEEK_FROM_START } from '@renderer/lib/messageCount'
+import { useEffect, useRef, useState } from 'react'
 
 interface QueuePurgeControlProps {
   profileId: string

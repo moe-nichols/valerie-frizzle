@@ -1,8 +1,8 @@
 import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus'
 import {
-  startAdminHttpsProxy,
+  type AdminHttpsProxy,
   buildAdminConnectionString,
-  type AdminHttpsProxy
+  startAdminHttpsProxy
 } from '../../src/main/services/adminHttpsProxy'
 import { AdminService } from '../../src/main/services/adminService'
 import { MessagingService } from '../../src/main/services/messagingService'

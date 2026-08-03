@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
-  PEEK_COUNT_CAP,
-  PEEK_FROM_START,
   fetchQueueMessageCount,
   fetchSubscriptionMessageCount,
-  formatMessageCount
+  formatMessageCount,
+  PEEK_COUNT_CAP,
+  PEEK_FROM_START
 } from '../../src/renderer/src/lib/messageCount'
 
 const countMock = vi.fn()

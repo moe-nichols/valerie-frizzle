@@ -19,7 +19,13 @@ interface TextFieldProps {
   placeholder?: string
 }
 
-export function TextField({ id, label, value, onChange, placeholder }: TextFieldProps): React.JSX.Element {
+export function TextField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder
+}: TextFieldProps): React.JSX.Element {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
@@ -72,7 +78,12 @@ interface CheckboxFieldProps {
   onChange: (checked: boolean) => void
 }
 
-export function CheckboxField({ id, label, checked, onChange }: CheckboxFieldProps): React.JSX.Element {
+export function CheckboxField({
+  id,
+  label,
+  checked,
+  onChange
+}: CheckboxFieldProps): React.JSX.Element {
   return (
     <div className="flex items-center gap-2">
       <Checkbox id={id} checked={checked} onCheckedChange={(value) => onChange(value === true)} />

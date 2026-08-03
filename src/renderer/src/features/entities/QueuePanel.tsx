@@ -1,8 +1,3 @@
-import { useState } from 'react'
-import { RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
-import type { QueueDescription } from '@shared/domain'
-import { buildDeadLetterQueuePath } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
@@ -12,6 +7,11 @@ import {
   formatMessageCount,
   type MessageCountResult
 } from '@renderer/lib/messageCount'
+import type { QueueDescription } from '@shared/domain'
+import { buildDeadLetterQueuePath } from '@shared/domain'
+import { RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 import { MessageBrowser } from '../messages/MessageBrowser'
 import { MessageComposer } from '../messages/MessageComposer'
 import { QueuePurgeControl } from './QueuePurgeControl'
@@ -109,7 +109,10 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
         </div>
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Browse</h3>
-          <MessageBrowser profileId={profileId} source={{ kind: 'entity', entityPath: queueName }} />
+          <MessageBrowser
+            profileId={profileId}
+            source={{ kind: 'entity', entityPath: queueName }}
+          />
         </div>
         <div className="space-y-3">
           <h3 className="flex flex-wrap items-center gap-2 text-lg font-medium">

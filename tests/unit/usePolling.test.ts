@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+
 import { renderHook } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { usePolling } from '../../src/renderer/src/lib/usePolling'
 
 /** A callback whose completion the test controls. */

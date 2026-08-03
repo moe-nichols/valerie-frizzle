@@ -1,9 +1,13 @@
 import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus'
-import log from 'electron-log/main'
 import { AppError } from '@shared/errors'
-import { startAdminHttpsProxy, buildAdminConnectionString, type AdminHttpsProxy } from './adminHttpsProxy'
-import { MessagingService } from './messagingService'
+import log from 'electron-log/main'
+import {
+  type AdminHttpsProxy,
+  buildAdminConnectionString,
+  startAdminHttpsProxy
+} from './adminHttpsProxy'
 import type { ProfilesRepo } from './db/profilesRepo'
+import { MessagingService } from './messagingService'
 
 interface ActiveConnection {
   adminClient: ServiceBusAdministrationClient
@@ -53,7 +57,10 @@ export class ConnectionManager {
     let sbClient: ServiceBusClient | undefined
     try {
       adminProxy = await startAdminHttpsProxy(profile.managementPort)
-      const adminConnectionString = buildAdminConnectionString(profile.connectionString, adminProxy.url)
+      const adminConnectionString = buildAdminConnectionString(
+        profile.connectionString,
+        adminProxy.url
+      )
       const adminClient = new ServiceBusAdministrationClient(adminConnectionString, {
         tlsOptions: { ca: adminProxy.caCert }
       })

@@ -45,7 +45,7 @@ describe('queueDeleted / topicDeleted', () => {
     expect(state.activeQueueName).toBeNull()
   })
 
-  test("a same-named queue deleted on a different profile leaves the selection alone", () => {
+  test('a same-named queue deleted on a different profile leaves the selection alone', () => {
     const state = connectionsReducer(
       stateWith({ selectedProfileId: 'p1', activeQueueName: 'q1' }),
       queueDeleted({ profileId: 'p2', name: 'q1' })

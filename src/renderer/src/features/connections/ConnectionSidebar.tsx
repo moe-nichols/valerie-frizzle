@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react'
-import { Loader2, MoreHorizontal, Plus } from 'lucide-react'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import {
   AlertDialog,
@@ -12,7 +10,6 @@ import {
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
 import { buttonVariants } from '@renderer/components/ui/button'
-import { cn } from '@renderer/lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +27,7 @@ import {
   SidebarMenuItem
 } from '@renderer/components/ui/sidebar'
 import { EntityTree } from '@renderer/features/entities/EntityTree'
+import { cn } from '@renderer/lib/utils'
 import {
   deleteProfile,
   disconnectProfile,
@@ -38,6 +36,8 @@ import {
   selectProfile
 } from '@renderer/store/connectionsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
+import { Loader2, MoreHorizontal, Plus } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { AddConnectionDialog } from './AddConnectionDialog'
 
 export function ConnectionSidebar(): React.JSX.Element {

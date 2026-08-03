@@ -1,7 +1,3 @@
-import { useState, type FormEvent } from 'react'
-import type { RuleDescription, RuleFilterInput } from '@shared/domain'
-import { usePolling } from '@renderer/lib/usePolling'
-import { useAppSelector } from '@renderer/store/hooks'
 import { Button } from '@renderer/components/ui/button'
 import {
   Collapsible,
@@ -17,6 +13,10 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
+import { usePolling } from '@renderer/lib/usePolling'
+import { useAppSelector } from '@renderer/store/hooks'
+import type { RuleDescription, RuleFilterInput } from '@shared/domain'
+import { type FormEvent, useState } from 'react'
 
 interface SubscriptionRulesProps {
   profileId: string
@@ -61,7 +61,11 @@ export function SubscriptionRules({
   const [editingName, setEditingName] = useState<string | null>(null)
 
   async function refresh(): Promise<void> {
-    const response = await window.sbAdmin.entities.rules.list(profileId, topicName, subscriptionName)
+    const response = await window.sbAdmin.entities.rules.list(
+      profileId,
+      topicName,
+      subscriptionName
+    )
     if (response.ok) {
       setRules(response.data)
       setError(null)
@@ -144,7 +148,12 @@ export function SubscriptionRules({
   }
 
   async function handleDelete(name: string): Promise<void> {
-    const response = await window.sbAdmin.entities.rules.delete(profileId, topicName, subscriptionName, name)
+    const response = await window.sbAdmin.entities.rules.delete(
+      profileId,
+      topicName,
+      subscriptionName,
+      name
+    )
     if (response.ok) {
       await refresh()
     } else {
@@ -168,7 +177,12 @@ export function SubscriptionRules({
                 {rule.name} — {describeFilter(rule.filter)}
                 {rule.action && ` → action: ${rule.action.sqlExpression}`}
               </span>
-              <Button variant="outline" size="sm" className="ml-auto" onClick={() => startEdit(rule)}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto"
+                onClick={() => startEdit(rule)}
+              >
                 Edit
               </Button>
               <Button variant="destructive" size="sm" onClick={() => handleDelete(rule.name)}>
@@ -209,7 +223,9 @@ export function SubscriptionRules({
           </div>
           {filterType === 'Sql' ? (
             <div className="space-y-1.5">
-              <Label htmlFor={`sql-expression-${topicName}-${subscriptionName}`}>SQL expression</Label>
+              <Label htmlFor={`sql-expression-${topicName}-${subscriptionName}`}>
+                SQL expression
+              </Label>
               <Input
                 id={`sql-expression-${topicName}-${subscriptionName}`}
                 value={sqlExpression}
@@ -221,7 +237,9 @@ export function SubscriptionRules({
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor={`correlation-id-${topicName}-${subscriptionName}`}>Correlation ID</Label>
+                <Label htmlFor={`correlation-id-${topicName}-${subscriptionName}`}>
+                  Correlation ID
+                </Label>
                 <Input
                   id={`correlation-id-${topicName}-${subscriptionName}`}
                   value={correlationId}
@@ -253,7 +271,9 @@ export function SubscriptionRules({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={`content-type-${topicName}-${subscriptionName}`}>Content type</Label>
+                <Label htmlFor={`content-type-${topicName}-${subscriptionName}`}>
+                  Content type
+                </Label>
                 <Input
                   id={`content-type-${topicName}-${subscriptionName}`}
                   value={contentType}

@@ -1,17 +1,17 @@
 import { randomUUID } from 'node:crypto'
-import Long from 'long'
 import type {
   ServiceBusClient,
   ServiceBusReceivedMessage,
   ServiceBusReceiver
 } from '@azure/service-bus'
 import type {
+  ApplicationPropertyValue,
   MessageEnvelope,
   ReceivedMessageDescription,
-  ReceiveMode,
-  ApplicationPropertyValue
+  ReceiveMode
 } from '@shared/domain'
 import { AppError } from '@shared/errors'
+import Long from 'long'
 
 interface PeekLockHandle {
   message: ServiceBusReceivedMessage

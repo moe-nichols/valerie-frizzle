@@ -1,16 +1,7 @@
-import { useEffect, useState } from 'react'
-import type { ReceivedMessageDescription, ReceiveMode } from '@shared/domain'
-import type { IpcError, Result } from '@shared/errors'
-import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle
-} from '@renderer/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
@@ -22,6 +13,10 @@ import {
   TableHeader,
   TableRow
 } from '@renderer/components/ui/table'
+import { useIsCurrent } from '@renderer/lib/useIsCurrent'
+import type { ReceivedMessageDescription, ReceiveMode } from '@shared/domain'
+import type { IpcError, Result } from '@shared/errors'
+import { useEffect, useState } from 'react'
 
 /**
  * Where a browser reads messages from. A queue (or a queue DLQ, addressed by its path
@@ -105,7 +100,13 @@ export function MessageBrowser({
 
   function receiveBatch(): Promise<Result<ReceivedMessageDescription[]>> {
     return source.kind === 'entity'
-      ? window.sbAdmin.messages.receive(profileId, source.entityPath, batchSize, mode, RECEIVE_WAIT_MS)
+      ? window.sbAdmin.messages.receive(
+          profileId,
+          source.entityPath,
+          batchSize,
+          mode,
+          RECEIVE_WAIT_MS
+        )
       : window.sbAdmin.messages.receiveSubscription(
           profileId,
           source.topicName,
@@ -172,7 +173,10 @@ export function MessageBrowser({
   }
 
   /** Runs a settle operation and, on success, drops the row and clears any prior error. */
-  async function settle(handleId: string, operation: () => Promise<Result<unknown>>): Promise<void> {
+  async function settle(
+    handleId: string,
+    operation: () => Promise<Result<unknown>>
+  ): Promise<void> {
     const response = await operation()
     if (response.ok) {
       setError(null)
@@ -312,8 +316,8 @@ export function MessageBrowser({
           />
           <Label htmlFor={`regenerate-message-id-${key}`}>Regenerate MessageId on resubmit</Label>
           <small className="text-muted-foreground">
-            (at-least-once: if the send succeeds but removing the original fails, don&apos;t
-            retry — you&apos;d duplicate the message)
+            (at-least-once: if the send succeeds but removing the original fails, don&apos;t retry —
+            you&apos;d duplicate the message)
           </small>
         </div>
       )}
@@ -400,7 +404,9 @@ export function MessageBrowser({
         </TableBody>
       </Table>
       {messages.length === 0 && (
-        <p className="text-muted-foreground text-sm">No messages loaded — peek or receive to load some.</p>
+        <p className="text-muted-foreground text-sm">
+          No messages loaded — peek or receive to load some.
+        </p>
       )}
       {messages.length > 0 && visibleMessages.length === 0 && (
         <p className="text-muted-foreground text-sm">No loaded messages match the filter.</p>

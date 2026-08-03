@@ -1,4 +1,3 @@
-import { useState, type FormEvent } from 'react'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -15,7 +14,8 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
-import { emptyTopicFields, toCreateTopicInput, TopicFields } from './entityForms'
+import { type FormEvent, useState } from 'react'
+import { emptyTopicFields, TopicFields, toCreateTopicInput } from './entityForms'
 
 interface CreateTopicDialogProps {
   profileId: string

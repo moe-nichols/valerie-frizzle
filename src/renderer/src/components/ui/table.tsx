@@ -1,10 +1,14 @@
-import type * as React from 'react'
 import { cn } from '@renderer/lib/utils'
+import type * as React from 'react'
 
 function Table({ className, ...props }: React.ComponentProps<'table'>): React.JSX.Element {
   return (
     <div data-slot="table-container" className="relative w-full overflow-x-auto">
-      <table data-slot="table" className={cn('w-full caption-bottom text-sm', className)} {...props} />
+      <table
+        data-slot="table"
+        className={cn('w-full caption-bottom text-sm', className)}
+        {...props}
+      />
     </div>
   )
 }
@@ -82,4 +86,4 @@ function TableCaption({ className, ...props }: React.ComponentProps<'caption'>):
   )
 }
 
-export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption }
+export { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow }

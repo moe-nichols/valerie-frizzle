@@ -1,9 +1,9 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
-import log from 'electron-log/main'
-import { ZodError, type ZodType } from 'zod'
 import { AppError, type Result } from '@shared/errors'
 import type { IpcChannels } from '@shared/ipc-contract'
 import { ipcRequestSchemas } from '@shared/ipc-schemas'
+import { type IpcMainInvokeEvent, ipcMain } from 'electron'
+import log from 'electron-log/main'
+import { ZodError, type ZodType } from 'zod'
 
 /** Runs fn and converts a thrown error into a Result — handlers should never let a raw
  * Error cross the IPC boundary, since Electron serializes thrown Errors lossily. Every

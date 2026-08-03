@@ -1,5 +1,5 @@
-import type { ProfilesRepo } from '../services/db/profilesRepo'
 import type { ConnectionManager } from '../services/connectionManager'
+import type { ProfilesRepo } from '../services/db/profilesRepo'
 import { registerHandler } from './wrapHandler'
 
 export function registerConnectionsIpcHandlers(
