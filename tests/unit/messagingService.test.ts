@@ -89,6 +89,28 @@ describe('MessagingService PeekLock receiver lifecycle', () => {
     expect(receiver.closeCount).toBe(1)
   })
 
+  test('a projection failure after a successful receive still closes the receiver', async () => {
+    // sequenceNumber.toNumber() throwing stands in for any projection failure between the
+    // receive resolving and the handles being registered — the receiver must not be
+    // stranded open with no handle ever able to release it.
+    const poisoned = {
+      sequenceNumber: {
+        toNumber: () => {
+          throw new Error('corrupt sequence number')
+        }
+      }
+    } as unknown as ServiceBusReceivedMessage
+    const receiver = new FakeReceiver([poisoned])
+    const service = makeService(receiver)
+
+    await expect(service.receiveMessages('q', 1, 'peekLock', 1000)).rejects.toThrow(
+      'corrupt sequence number'
+    )
+    expect(receiver.closeCount).toBe(1)
+    // No half-registered handle may survive the failure.
+    await expect(service.completeMessage('anything')).rejects.toThrow('no such message handle')
+  })
+
   test('concurrent settlements close the shared receiver exactly once, after both resolve (F2)', async () => {
     const receiver = new FakeReceiver([makeMessage(1), makeMessage(2)])
     const service = makeService(receiver)
