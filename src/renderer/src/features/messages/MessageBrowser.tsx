@@ -42,6 +42,14 @@ const MIN_BATCH_SIZE = 1
 const MAX_BATCH_SIZE = 2048
 const RECEIVE_WAIT_MS = 5000
 
+/** A message that arrived via PeekLock and can therefore be settled (completed,
+ * abandoned, dead-lettered, resubmitted). Peeked rows have no handle. */
+type SettleableMessage = ReceivedMessageDescription & { handleId: string }
+
+function isSettleable(message: ReceivedMessageDescription): message is SettleableMessage {
+  return typeof message.handleId === 'string'
+}
+
 /** A stable identity string for a source, used to reset the browser when it changes. */
 function sourceKey(source: MessageSource): string {
   return source.kind === 'entity'
@@ -205,12 +213,12 @@ export function MessageBrowser({
     )
   }
 
-  async function handleResubmit(message: ReceivedMessageDescription): Promise<void> {
-    if (!resubmitDestination || !message.handleId) return
+  async function handleResubmit(message: SettleableMessage): Promise<void> {
+    if (!resubmitDestination) return
     await settle(message.handleId, () =>
       window.sbAdmin.messages.resubmit(
         profileId,
-        message.handleId as string,
+        message.handleId,
         message,
         resubmitDestination,
         regenerateMessageId
@@ -367,26 +375,26 @@ export function MessageBrowser({
                   <Button variant="outline" size="sm" onClick={() => setSelected(message)}>
                     View
                   </Button>
-                  {message.handleId && (
+                  {isSettleable(message) && (
                     <>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleComplete(message.handleId as string)}
+                        onClick={() => handleComplete(message.handleId)}
                       >
                         Complete
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleAbandon(message.handleId as string)}
+                        onClick={() => handleAbandon(message.handleId)}
                       >
                         Abandon
                       </Button>
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleDeadLetter(message.handleId as string)}
+                        onClick={() => handleDeadLetter(message.handleId)}
                       >
                         Dead-letter
                       </Button>
