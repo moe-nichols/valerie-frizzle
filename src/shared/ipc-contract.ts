@@ -163,6 +163,25 @@ export interface IpcChannels {
     }
     response: Result<ReceivedMessageDescription[]>
   }
+  'messages:count': {
+    request: {
+      profileId: string
+      entityPath: string
+      maxCount: number
+      fromSequenceNumber?: number
+    }
+    response: Result<number>
+  }
+  'messages:countSubscription': {
+    request: {
+      profileId: string
+      topicName: string
+      subscriptionName: string
+      maxCount: number
+      fromSequenceNumber?: number
+    }
+    response: Result<number>
+  }
   'messages:receive': {
     request: {
       profileId: string

@@ -11,6 +11,7 @@ import {
   formatMessageCount,
   type MessageCountResult
 } from '@renderer/lib/messageCount'
+import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import { usePolling } from '@renderer/lib/usePolling'
 import { useAppSelector } from '@renderer/store/hooks'
 import { MessageComposer } from '../messages/MessageComposer'
@@ -30,22 +31,24 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
   )
   const [error, setError] = useState<string | null>(null)
   const [newSubscriptionName, setNewSubscriptionName] = useState('')
+  const isCurrent = useIsCurrent(`${profileId}::${topicName}`)
 
-  async function refreshTopic(): Promise<void> {
+  // The two refreshers report their error rather than writing shared `error` state
+  // directly, so the combined refresh can set it once — otherwise one branch's success
+  // could clobber the other branch's failure (they run concurrently). They also bail out
+  // once a newer selection has superseded this one, so stale data can't land in the panel.
+  async function refreshTopic(): Promise<string | null> {
     const response = await window.sbAdmin.entities.topics.get(profileId, topicName)
-    if (response.ok) {
-      setTopic(response.data)
-    } else {
-      setError(response.error.message)
-    }
+    if (!isCurrent()) return null
+    if (!response.ok) return response.error.message
+    setTopic(response.data)
+    return null
   }
 
-  async function refreshSubscriptions(): Promise<void> {
+  async function refreshSubscriptions(): Promise<string | null> {
     const response = await window.sbAdmin.entities.subscriptions.list(profileId, topicName)
-    if (!response.ok) {
-      setError(response.error.message)
-      return
-    }
+    if (!isCurrent()) return null
+    if (!response.ok) return response.error.message
     setSubscriptions(response.data)
 
     const counts = await Promise.all(
@@ -53,6 +56,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
         fetchSubscriptionMessageCount(profileId, topicName, subscription.subscriptionName)
       )
     )
+    if (!isCurrent()) return null
     setSubscriptionCounts((prev) => {
       const next: Record<string, MessageCountResult> = {}
       response.data.forEach((subscription, index) => {
@@ -65,10 +69,16 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
       })
       return next
     })
+    return null
   }
 
   async function refresh(): Promise<void> {
-    await Promise.all([refreshTopic(), refreshSubscriptions()])
+    const [topicError, subscriptionError] = await Promise.all([
+      refreshTopic(),
+      refreshSubscriptions()
+    ])
+    if (!isCurrent()) return
+    setError(topicError ?? subscriptionError)
   }
 
   useEffect(() => {
@@ -90,7 +100,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     })
     if (response.ok) {
       setNewSubscriptionName('')
-      await refreshSubscriptions()
+      setError(await refreshSubscriptions())
     } else {
       setError(response.error.message)
     }
@@ -103,7 +113,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
       subscriptionName
     )
     if (response.ok) {
-      await refreshSubscriptions()
+      setError(await refreshSubscriptions())
     } else {
       setError(response.error.message)
     }

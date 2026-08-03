@@ -197,3 +197,44 @@ describe("MessagingService — peekSubscriptionMessages", () => {
     expect(found?.body).toBe("fan-out me");
   });
 });
+
+describe("MessagingService — count methods", () => {
+  const countQueueName = `test-count-queue-${Date.now()}`;
+
+  beforeAll(async () => {
+    await adminService.createQueue({ name: countQueueName });
+    for (let i = 0; i < 3; i++) {
+      await messagingService.sendMessage(countQueueName, {
+        body: `count-${i}`,
+        bodyMode: "text",
+        messageId: `msg-count-${i}`,
+      });
+    }
+  });
+
+  afterAll(async () => {
+    await adminService.deleteQueue(countQueueName);
+  });
+
+  test("countMessages returns the number of messages, capped at maxCount", async () => {
+    expect(await messagingService.countMessages(countQueueName, 250, 0)).toBe(3);
+    // Capped: only maxCount is peeked, so the result is a lower bound.
+    expect(await messagingService.countMessages(countQueueName, 2, 0)).toBe(2);
+  });
+
+  test("countSubscriptionMessages counts messages fanned out to a subscription", async () => {
+    await messagingService.sendMessage(topicName, {
+      body: "count me",
+      bodyMode: "text",
+      messageId: "msg-sub-count-1",
+    });
+
+    const count = await messagingService.countSubscriptionMessages(
+      topicName,
+      subscriptionName,
+      250,
+      0,
+    );
+    expect(count).toBeGreaterThanOrEqual(1);
+  });
+});

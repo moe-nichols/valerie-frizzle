@@ -144,6 +144,50 @@ export class MessagingService {
     }
   }
 
+  /**
+   * Counts messages by peeking up to `maxCount` and returning only the tally — the full
+   * envelopes never leave the main process. Used by the sidebar/panel pollers, which would
+   * otherwise serialize every message body over IPC just to read `.length`. Callers treat
+   * a result equal to `maxCount` as a lower bound ("N+"). Mirrors `peekMessages` for
+   * cursor semantics: pass `fromSequenceNumber: 0` to count from the very first message.
+   */
+  async countMessages(
+    entityPath: string,
+    maxCount: number,
+    fromSequenceNumber?: number
+  ): Promise<number> {
+    const receiver = this.client.createReceiver(entityPath)
+    try {
+      const messages = await receiver.peekMessages(maxCount, {
+        fromSequenceNumber:
+          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
+      })
+      return messages.length
+    } finally {
+      await receiver.close()
+    }
+  }
+
+  /** Subscription counterpart of {@link countMessages}; addresses the subscription via the
+   * two-arg `createReceiver` overload, exactly as {@link peekSubscriptionMessages} does. */
+  async countSubscriptionMessages(
+    topicName: string,
+    subscriptionName: string,
+    maxCount: number,
+    fromSequenceNumber?: number
+  ): Promise<number> {
+    const receiver = this.client.createReceiver(topicName, subscriptionName)
+    try {
+      const messages = await receiver.peekMessages(maxCount, {
+        fromSequenceNumber:
+          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
+      })
+      return messages.length
+    } finally {
+      await receiver.close()
+    }
+  }
+
   async receiveMessages(
     entityPath: string,
     maxCount: number,

@@ -115,6 +115,22 @@ const api = {
         maxCount,
         fromSequenceNumber
       }),
+    count: (profileId: string, entityPath: string, maxCount: number, fromSequenceNumber?: number) =>
+      invoke('messages:count', { profileId, entityPath, maxCount, fromSequenceNumber }),
+    countSubscription: (
+      profileId: string,
+      topicName: string,
+      subscriptionName: string,
+      maxCount: number,
+      fromSequenceNumber?: number
+    ) =>
+      invoke('messages:countSubscription', {
+        profileId,
+        topicName,
+        subscriptionName,
+        maxCount,
+        fromSequenceNumber
+      }),
     receive: (
       profileId: string,
       entityPath: string,
