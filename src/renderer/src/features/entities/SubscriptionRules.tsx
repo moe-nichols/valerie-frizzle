@@ -27,6 +27,30 @@ interface SubscriptionRulesProps {
   subscriptionName: string
 }
 
+interface RuleFormState {
+  ruleName: string
+  filterType: 'Sql' | 'Correlation'
+  sqlExpression: string
+  correlationId: string
+  messageId: string
+  subject: string
+  sessionId: string
+  contentType: string
+  actionSql: string
+}
+
+const emptyRuleForm: RuleFormState = {
+  ruleName: '',
+  filterType: 'Sql',
+  sqlExpression: '',
+  correlationId: '',
+  messageId: '',
+  subject: '',
+  sessionId: '',
+  contentType: '',
+  actionSql: ''
+}
+
 function describeFilter(filter: RuleFilterInput): string {
   if (filter.type === 'Sql') {
     return `SQL: ${filter.sqlExpression}`
@@ -51,15 +75,11 @@ export function SubscriptionRules({
   const [rules, setRules] = useState<RuleDescription[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const [ruleName, setRuleName] = useState('')
-  const [filterType, setFilterType] = useState<'Sql' | 'Correlation'>('Sql')
-  const [sqlExpression, setSqlExpression] = useState('')
-  const [correlationId, setCorrelationId] = useState('')
-  const [messageId, setMessageId] = useState('')
-  const [subject, setSubject] = useState('')
-  const [sessionId, setSessionId] = useState('')
-  const [contentType, setContentType] = useState('')
-  const [actionSql, setActionSql] = useState('')
+  // One state object for the whole rule form (the entityForms FieldsState pattern),
+  // instead of a useState per field.
+  const [form, setForm] = useState<RuleFormState>(emptyRuleForm)
+  const set = <K extends keyof RuleFormState>(key: K, value: RuleFormState[K]): void =>
+    setForm((prev) => ({ ...prev, [key]: value }))
   // Non-null while editing an existing rule (its name is then immutable); null = create mode.
   const [editingName, setEditingName] = useState<string | null>(null)
   const [deletingName, setDeletingName] = useState<string | null>(null)
@@ -92,53 +112,47 @@ export function SubscriptionRules({
 
   function resetForm(): void {
     setEditingName(null)
-    setRuleName('')
-    setFilterType('Sql')
-    setSqlExpression('')
-    setCorrelationId('')
-    setMessageId('')
-    setSubject('')
-    setSessionId('')
-    setContentType('')
-    setActionSql('')
+    setForm(emptyRuleForm)
   }
 
   function startEdit(rule: RuleDescription): void {
     setEditingName(rule.name)
-    setRuleName(rule.name)
-    setActionSql(rule.action?.sqlExpression ?? '')
-    if (rule.filter.type === 'Sql') {
-      setFilterType('Sql')
-      setSqlExpression(rule.filter.sqlExpression)
-    } else {
-      setFilterType('Correlation')
-      setCorrelationId(rule.filter.correlationId ?? '')
-      setMessageId(rule.filter.messageId ?? '')
-      setSubject(rule.filter.subject ?? '')
-      setSessionId(rule.filter.sessionId ?? '')
-      setContentType(rule.filter.contentType ?? '')
-    }
+    setForm({
+      ...emptyRuleForm,
+      ruleName: rule.name,
+      actionSql: rule.action?.sqlExpression ?? '',
+      ...(rule.filter.type === 'Sql'
+        ? { filterType: 'Sql' as const, sqlExpression: rule.filter.sqlExpression }
+        : {
+            filterType: 'Correlation' as const,
+            correlationId: rule.filter.correlationId ?? '',
+            messageId: rule.filter.messageId ?? '',
+            subject: rule.filter.subject ?? '',
+            sessionId: rule.filter.sessionId ?? '',
+            contentType: rule.filter.contentType ?? ''
+          })
+    })
   }
 
   const ruleForm = useAsyncSubmit(
     () => {
       const filter: RuleFilterInput =
-        filterType === 'Sql'
-          ? { type: 'Sql', sqlExpression }
+        form.filterType === 'Sql'
+          ? { type: 'Sql', sqlExpression: form.sqlExpression }
           : {
               type: 'Correlation',
-              correlationId: correlationId || undefined,
-              messageId: messageId || undefined,
-              subject: subject || undefined,
-              sessionId: sessionId || undefined,
-              contentType: contentType || undefined
+              correlationId: form.correlationId || undefined,
+              messageId: form.messageId || undefined,
+              subject: form.subject || undefined,
+              sessionId: form.sessionId || undefined,
+              contentType: form.contentType || undefined
             }
       const input = {
         topicName,
         subscriptionName,
-        name: ruleName,
+        name: form.ruleName,
         filter,
-        action: actionSql.trim() ? { sqlExpression: actionSql.trim() } : undefined
+        action: form.actionSql.trim() ? { sqlExpression: form.actionSql.trim() } : undefined
       }
       return editingName
         ? window.sbAdmin.entities.rules.update(profileId, input)
@@ -208,8 +222,8 @@ export function SubscriptionRules({
             <Label htmlFor={`rule-name-${topicName}-${subscriptionName}`}>Rule name</Label>
             <Input
               id={`rule-name-${topicName}-${subscriptionName}`}
-              value={ruleName}
-              onChange={(event) => setRuleName(event.target.value)}
+              value={form.ruleName}
+              onChange={(event) => set('ruleName', event.target.value)}
               disabled={editingName !== null}
               required
             />
@@ -217,8 +231,8 @@ export function SubscriptionRules({
           <div className="space-y-1.5">
             <Label>Filter type</Label>
             <Select
-              value={filterType}
-              onValueChange={(value) => setFilterType(value as 'Sql' | 'Correlation')}
+              value={form.filterType}
+              onValueChange={(value) => set('filterType', value as 'Sql' | 'Correlation')}
             >
               <SelectTrigger className="w-40">
                 <SelectValue />
@@ -229,15 +243,15 @@ export function SubscriptionRules({
               </SelectContent>
             </Select>
           </div>
-          {filterType === 'Sql' ? (
+          {form.filterType === 'Sql' ? (
             <div className="space-y-1.5">
               <Label htmlFor={`sql-expression-${topicName}-${subscriptionName}`}>
                 SQL expression
               </Label>
               <Input
                 id={`sql-expression-${topicName}-${subscriptionName}`}
-                value={sqlExpression}
-                onChange={(event) => setSqlExpression(event.target.value)}
+                value={form.sqlExpression}
+                onChange={(event) => set('sqlExpression', event.target.value)}
                 placeholder="sys.Label = 'urgent'"
                 required
               />
@@ -250,32 +264,32 @@ export function SubscriptionRules({
                 </Label>
                 <Input
                   id={`correlation-id-${topicName}-${subscriptionName}`}
-                  value={correlationId}
-                  onChange={(event) => setCorrelationId(event.target.value)}
+                  value={form.correlationId}
+                  onChange={(event) => set('correlationId', event.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor={`message-id-${topicName}-${subscriptionName}`}>Message ID</Label>
                 <Input
                   id={`message-id-${topicName}-${subscriptionName}`}
-                  value={messageId}
-                  onChange={(event) => setMessageId(event.target.value)}
+                  value={form.messageId}
+                  onChange={(event) => set('messageId', event.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor={`subject-${topicName}-${subscriptionName}`}>Subject</Label>
                 <Input
                   id={`subject-${topicName}-${subscriptionName}`}
-                  value={subject}
-                  onChange={(event) => setSubject(event.target.value)}
+                  value={form.subject}
+                  onChange={(event) => set('subject', event.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor={`session-id-${topicName}-${subscriptionName}`}>Session ID</Label>
                 <Input
                   id={`session-id-${topicName}-${subscriptionName}`}
-                  value={sessionId}
-                  onChange={(event) => setSessionId(event.target.value)}
+                  value={form.sessionId}
+                  onChange={(event) => set('sessionId', event.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
@@ -284,8 +298,8 @@ export function SubscriptionRules({
                 </Label>
                 <Input
                   id={`content-type-${topicName}-${subscriptionName}`}
-                  value={contentType}
-                  onChange={(event) => setContentType(event.target.value)}
+                  value={form.contentType}
+                  onChange={(event) => set('contentType', event.target.value)}
                 />
               </div>
             </div>
@@ -296,8 +310,8 @@ export function SubscriptionRules({
             </Label>
             <Input
               id={`rule-action-${topicName}-${subscriptionName}`}
-              value={actionSql}
-              onChange={(event) => setActionSql(event.target.value)}
+              value={form.actionSql}
+              onChange={(event) => set('actionSql', event.target.value)}
               placeholder="SET sys.Label = 'HANDLED'"
             />
           </div>

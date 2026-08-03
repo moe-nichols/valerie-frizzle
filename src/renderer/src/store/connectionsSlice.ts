@@ -24,6 +24,13 @@ function without(ids: string[], id: string): string[] {
   return ids.filter((existing) => existing !== id)
 }
 
+/** Any change of which profile is selected (or connected) invalidates the entity
+ * selection — the active queue/topic belongs to the profile it was selected under. */
+function clearActiveSelections(state: ConnectionsState): void {
+  state.activeQueueName = null
+  state.activeTopicName = null
+}
+
 export const fetchProfiles = createAsyncThunk<ConnectionProfile[], void, { rejectValue: string }>(
   'connections/fetchProfiles',
   async (_, { rejectWithValue }) => {
@@ -85,8 +92,7 @@ const connectionsSlice = createSlice({
     // Select an already-connected profile — instant, no IPC round trip.
     profileSelected(state, action: PayloadAction<string>) {
       state.selectedProfileId = action.payload
-      state.activeQueueName = null
-      state.activeTopicName = null
+      clearActiveSelections(state)
     },
     queueSelected(state, action: PayloadAction<string>) {
       state.activeQueueName = action.payload
@@ -150,8 +156,7 @@ const connectionsSlice = createSlice({
         state.connectingIds = without(state.connectingIds, action.payload)
         state.connectedIds.push(action.payload)
         state.selectedProfileId = action.payload
-        state.activeQueueName = null
-        state.activeTopicName = null
+        clearActiveSelections(state)
       })
       .addCase(selectProfile.rejected, (state, action) => {
         state.connectingIds = without(state.connectingIds, action.meta.arg)
@@ -160,8 +165,7 @@ const connectionsSlice = createSlice({
         state.connectedIds = without(state.connectedIds, action.payload)
         if (state.selectedProfileId === action.payload) {
           state.selectedProfileId = null
-          state.activeQueueName = null
-          state.activeTopicName = null
+          clearActiveSelections(state)
         }
       })
       .addCase(deleteProfile.fulfilled, (state, action) => {
@@ -169,8 +173,7 @@ const connectionsSlice = createSlice({
         state.profiles = state.profiles.filter((profile) => profile.id !== action.payload)
         if (state.selectedProfileId === action.payload) {
           state.selectedProfileId = null
-          state.activeQueueName = null
-          state.activeTopicName = null
+          clearActiveSelections(state)
         }
       })
   }
