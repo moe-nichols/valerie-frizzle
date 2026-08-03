@@ -1,6 +1,5 @@
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
-import { Button } from '@renderer/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
 import {
   fetchQueueMessageCount,
@@ -9,13 +8,12 @@ import {
 } from '@renderer/lib/messageCount'
 import type { QueueDescription } from '@shared/domain'
 import { buildDeadLetterQueuePath } from '@shared/domain'
-import { RefreshCw } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 import { MessageBrowser } from '../messages/MessageBrowser'
 import { MessageComposer } from '../messages/MessageComposer'
+import { PanelRefreshControls } from './PanelRefreshControls'
 import { QueuePurgeControl } from './QueuePurgeControl'
-import { useEntityPanel } from './useEntityPanel'
+import { reportRefreshError, useEntityPanel } from './useEntityPanel'
 
 interface QueuePanelProps {
   profileId: string
@@ -54,10 +52,12 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
       setQueue(queueResponse.data)
       setError(null)
       setLastRefreshed(new Date())
-    } else if (viaPoll) {
-      toast.error(`Failed to refresh ${queueName}: ${queueResponse.error.message}`)
     } else {
-      setError(queueResponse.error.message)
+      reportRefreshError(
+        `Failed to refresh ${queueName}: ${queueResponse.error.message}`,
+        viaPoll,
+        setError
+      )
     }
     if (countResult) setCount(countResult)
   }
@@ -69,21 +69,7 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
           {queueName}
           {count && <Badge variant="secondary">{formatMessageCount(count)} active</Badge>}
           <QueuePurgeControl profileId={profileId} entityPath={queueName} />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            title="Refresh now"
-            onClick={() => refresh()}
-          >
-            <RefreshCw />
-            <span className="sr-only">Refresh now</span>
-          </Button>
-          {lastRefreshed && (
-            <span className="text-muted-foreground text-xs font-normal">
-              Updated {lastRefreshed.toLocaleTimeString()}
-            </span>
-          )}
+          <PanelRefreshControls onRefresh={() => refresh()} lastRefreshed={lastRefreshed} />
         </CardTitle>
         {queue && (
           <p className="text-muted-foreground text-sm">

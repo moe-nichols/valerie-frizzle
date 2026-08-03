@@ -1,6 +1,5 @@
 import { ConfirmDialog, permanentRemovalDescription } from '@renderer/components/ConfirmDialog'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
-import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
 import {
@@ -10,23 +9,23 @@ import {
 } from '@renderer/components/ui/collapsible'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
-import { fetchSubscriptionMessageCount, formatMessageCount } from '@renderer/lib/messageCount'
+import { fetchSubscriptionMessageCount } from '@renderer/lib/messageCount'
 import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
 import { useEntityCounts } from '@renderer/lib/useEntityCounts'
 import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
-import { RefreshCw } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 import { MessageComposer } from '../messages/MessageComposer'
 import { EditSubscriptionDialog } from './EditEntityDialogs'
+import { EntityCountBadges } from './EntityCountBadges'
 import {
   emptySubscriptionFields,
   SubscriptionFields,
   toCreateSubscriptionInput
 } from './entityForms'
+import { PanelRefreshControls } from './PanelRefreshControls'
 import { SubscriptionMessages } from './SubscriptionMessages'
 import { SubscriptionRules } from './SubscriptionRules'
-import { useEntityPanel } from './useEntityPanel'
+import { reportRefreshError, useEntityPanel } from './useEntityPanel'
 
 interface TopicPanelProps {
   profileId: string
@@ -113,11 +112,8 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     if (!err) {
       setError(null)
       setLastRefreshed(new Date())
-    } else if (viaPoll) {
-      // Background failures toast rather than pin an inline banner the next poll clears.
-      toast.error(`Failed to refresh ${topicName}: ${err}`)
     } else {
-      setError(err)
+      reportRefreshError(`Failed to refresh ${topicName}: ${err}`, viaPoll, setError)
     }
   }
 
@@ -153,21 +149,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2 text-xl">
           {topicName}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            title="Refresh now"
-            onClick={() => refresh()}
-          >
-            <RefreshCw />
-            <span className="sr-only">Refresh now</span>
-          </Button>
-          {lastRefreshed && (
-            <span className="text-muted-foreground text-xs font-normal">
-              Updated {lastRefreshed.toLocaleTimeString()}
-            </span>
-          )}
+          <PanelRefreshControls onRefresh={() => refresh()} lastRefreshed={lastRefreshed} />
         </CardTitle>
         {topic && (
           <p className="text-muted-foreground text-sm">
@@ -207,18 +189,11 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                   <span className="text-muted-foreground">
                     ({subscription.status}, max delivery {subscription.maxDeliveryCount})
                   </span>
-                  {subscriptionCounts[subscription.subscriptionName] && (
-                    <Badge variant="secondary">
-                      {formatMessageCount(subscriptionCounts[subscription.subscriptionName])} active
-                    </Badge>
-                  )}
-                  {subscriptionDlqCounts[subscription.subscriptionName] &&
-                    subscriptionDlqCounts[subscription.subscriptionName].count > 0 && (
-                      <Badge variant="destructive" title="Dead-lettered messages">
-                        {formatMessageCount(subscriptionDlqCounts[subscription.subscriptionName])}{' '}
-                        DLQ
-                      </Badge>
-                    )}
+                  <EntityCountBadges
+                    active={subscriptionCounts[subscription.subscriptionName]}
+                    deadLetter={subscriptionDlqCounts[subscription.subscriptionName]}
+                    activeSuffix=" active"
+                  />
                   <Button
                     variant="outline"
                     size="sm"

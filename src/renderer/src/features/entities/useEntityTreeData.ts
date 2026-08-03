@@ -11,7 +11,7 @@ import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 import type { QueueDescription, TopicDescription } from '@shared/domain'
 import { buildDeadLetterQueuePath } from '@shared/domain'
 import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { reportRefreshError } from './useEntityPanel'
 
 /**
  * Data layer for the sidebar entity tree: the queue/topic listings, their count maps, and
@@ -87,12 +87,10 @@ export function useEntityTreeData(profileId: string): {
       nextError = nextError ?? topicsResponse.error.message
     }
     if (!isCurrent()) return
-    // Background poll failures toast instead of pinning the sidebar alert; a manual/initial
-    // refresh still surfaces inline where the user is looking.
-    if (nextError && viaPoll) {
-      toast.error(nextError)
+    if (nextError) {
+      reportRefreshError(nextError, viaPoll, setError)
     } else {
-      setError(nextError)
+      setError(null)
     }
     setLoaded(true)
   }

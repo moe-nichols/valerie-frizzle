@@ -2,6 +2,24 @@ import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import { usePolling } from '@renderer/lib/usePolling'
 import { useAppSelector } from '@renderer/store/hooks'
 import { useEffect } from 'react'
+import { toast } from 'sonner'
+
+/**
+ * Routes a refresh failure to where the user is looking: background (timer-driven)
+ * failures toast, so a transient blip is noticed without pinning an inline banner the
+ * next successful poll would just clear; manual/initial refreshes surface inline.
+ */
+export function reportRefreshError(
+  message: string,
+  viaPoll: boolean,
+  setError: (error: string | null) => void
+): void {
+  if (viaPoll) {
+    toast.error(message)
+  } else {
+    setError(message)
+  }
+}
 
 /**
  * Shared scaffolding for the entity detail panels (QueuePanel/TopicPanel), which render
