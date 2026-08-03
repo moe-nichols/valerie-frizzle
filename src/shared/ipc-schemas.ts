@@ -224,7 +224,8 @@ export const ipcRequestSchemas: {
     topicName: nonEmptyString,
     subscriptionName: nonEmptyString,
     maxCount: batchCount,
-    fromSequenceNumber: sequenceNumber.optional()
+    fromSequenceNumber: sequenceNumber.optional(),
+    deadLetter: z.boolean().optional()
   }),
   'messages:count': z.object({
     profileId: nonEmptyString,
@@ -237,7 +238,8 @@ export const ipcRequestSchemas: {
     topicName: nonEmptyString,
     subscriptionName: nonEmptyString,
     maxCount: batchCount,
-    fromSequenceNumber: sequenceNumber.optional()
+    fromSequenceNumber: sequenceNumber.optional(),
+    deadLetter: z.boolean().optional()
   }),
   'messages:receive': z.object({
     profileId: nonEmptyString,
@@ -245,6 +247,15 @@ export const ipcRequestSchemas: {
     maxCount: batchCount,
     mode: receiveMode,
     maxWaitTimeMs: waitTimeMs
+  }),
+  'messages:receiveSubscription': z.object({
+    profileId: nonEmptyString,
+    topicName: nonEmptyString,
+    subscriptionName: nonEmptyString,
+    maxCount: batchCount,
+    mode: receiveMode,
+    maxWaitTimeMs: waitTimeMs,
+    deadLetter: z.boolean().optional()
   }),
   'messages:complete': z.object({ profileId: nonEmptyString, handleId: nonEmptyString }),
   'messages:abandon': z.object({ profileId: nonEmptyString, handleId: nonEmptyString }),

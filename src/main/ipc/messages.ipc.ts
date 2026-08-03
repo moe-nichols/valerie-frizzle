@@ -26,7 +26,8 @@ export function registerMessagesIpcHandlers(connectionManager: ConnectionManager
         request.topicName,
         request.subscriptionName,
         request.maxCount,
-        request.fromSequenceNumber
+        request.fromSequenceNumber,
+        request.deadLetter
       )
   )
 
@@ -43,7 +44,8 @@ export function registerMessagesIpcHandlers(connectionManager: ConnectionManager
         request.topicName,
         request.subscriptionName,
         request.maxCount,
-        request.fromSequenceNumber
+        request.fromSequenceNumber,
+        request.deadLetter
       )
   )
 
@@ -51,6 +53,19 @@ export function registerMessagesIpcHandlers(connectionManager: ConnectionManager
     connectionManager
       .getMessagingService(request.profileId)
       .receiveMessages(request.entityPath, request.maxCount, request.mode, request.maxWaitTimeMs)
+  )
+
+  registerHandler('messages:receiveSubscription', (request) =>
+    connectionManager
+      .getMessagingService(request.profileId)
+      .receiveSubscriptionMessages(
+        request.topicName,
+        request.subscriptionName,
+        request.maxCount,
+        request.mode,
+        request.maxWaitTimeMs,
+        request.deadLetter
+      )
   )
 
   registerHandler('messages:complete', async (request) => {

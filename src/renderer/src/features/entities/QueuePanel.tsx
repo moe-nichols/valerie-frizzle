@@ -81,7 +81,7 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
         </div>
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Browse</h3>
-          <MessageBrowser profileId={profileId} entityPath={queueName} />
+          <MessageBrowser profileId={profileId} source={{ kind: 'entity', entityPath: queueName }} />
         </div>
         <div className="space-y-3">
           <h3 className="flex flex-wrap items-center gap-2 text-lg font-medium">
@@ -94,7 +94,7 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
           </h3>
           <MessageBrowser
             profileId={profileId}
-            entityPath={buildDeadLetterQueuePath(queueName)}
+            source={{ kind: 'entity', entityPath: buildDeadLetterQueuePath(queueName) }}
             resubmitDestination={queueName}
           />
         </div>

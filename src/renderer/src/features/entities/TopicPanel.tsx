@@ -15,6 +15,7 @@ import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import { usePolling } from '@renderer/lib/usePolling'
 import { useAppSelector } from '@renderer/store/hooks'
 import { MessageComposer } from '../messages/MessageComposer'
+import { SubscriptionMessages } from './SubscriptionMessages'
 import { SubscriptionRules } from './SubscriptionRules'
 
 interface TopicPanelProps {
@@ -170,6 +171,11 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                   </Button>
                 </div>
                 <SubscriptionRules
+                  profileId={profileId}
+                  topicName={topicName}
+                  subscriptionName={subscription.subscriptionName}
+                />
+                <SubscriptionMessages
                   profileId={profileId}
                   topicName={topicName}
                   subscriptionName={subscription.subscriptionName}

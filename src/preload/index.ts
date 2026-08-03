@@ -106,14 +106,16 @@ const api = {
       topicName: string,
       subscriptionName: string,
       maxCount: number,
-      fromSequenceNumber?: number
+      fromSequenceNumber?: number,
+      deadLetter?: boolean
     ) =>
       invoke('messages:peekSubscription', {
         profileId,
         topicName,
         subscriptionName,
         maxCount,
-        fromSequenceNumber
+        fromSequenceNumber,
+        deadLetter
       }),
     count: (profileId: string, entityPath: string, maxCount: number, fromSequenceNumber?: number) =>
       invoke('messages:count', { profileId, entityPath, maxCount, fromSequenceNumber }),
@@ -122,14 +124,16 @@ const api = {
       topicName: string,
       subscriptionName: string,
       maxCount: number,
-      fromSequenceNumber?: number
+      fromSequenceNumber?: number,
+      deadLetter?: boolean
     ) =>
       invoke('messages:countSubscription', {
         profileId,
         topicName,
         subscriptionName,
         maxCount,
-        fromSequenceNumber
+        fromSequenceNumber,
+        deadLetter
       }),
     receive: (
       profileId: string,
@@ -138,6 +142,24 @@ const api = {
       mode: IpcChannels['messages:receive']['request']['mode'],
       maxWaitTimeMs: number
     ) => invoke('messages:receive', { profileId, entityPath, maxCount, mode, maxWaitTimeMs }),
+    receiveSubscription: (
+      profileId: string,
+      topicName: string,
+      subscriptionName: string,
+      maxCount: number,
+      mode: IpcChannels['messages:receiveSubscription']['request']['mode'],
+      maxWaitTimeMs: number,
+      deadLetter?: boolean
+    ) =>
+      invoke('messages:receiveSubscription', {
+        profileId,
+        topicName,
+        subscriptionName,
+        maxCount,
+        mode,
+        maxWaitTimeMs,
+        deadLetter
+      }),
     complete: (profileId: string, handleId: string) =>
       invoke('messages:complete', { profileId, handleId }),
     abandon: (profileId: string, handleId: string) =>

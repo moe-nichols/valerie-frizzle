@@ -238,3 +238,79 @@ describe("MessagingService — count methods", () => {
     expect(count).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("MessagingService — receiveSubscriptionMessages", () => {
+  // Its own topic/subscription so peekLock/DLQ state doesn't collide with other tests.
+  const rxTopicName = `test-rx-topic-${Date.now()}`;
+  const rxSubscriptionName = "test-rx-sub";
+
+  beforeAll(async () => {
+    await adminService.createTopic({ name: rxTopicName });
+    await adminService.createSubscription({
+      topicName: rxTopicName,
+      subscriptionName: rxSubscriptionName,
+    });
+  });
+
+  afterAll(async () => {
+    await adminService.deleteTopic(rxTopicName);
+  });
+
+  test("peekLock receive from a subscription yields a settleable handle; complete removes it", async () => {
+    await messagingService.sendMessage(rxTopicName, {
+      body: "receive me",
+      bodyMode: "text",
+      messageId: "msg-sub-rx-1",
+    });
+
+    const received = await messagingService.receiveSubscriptionMessages(
+      rxTopicName,
+      rxSubscriptionName,
+      10,
+      "peekLock",
+      5000,
+    );
+    const message = received.find((m) => m.messageId === "msg-sub-rx-1");
+    expect(message).toBeDefined();
+    expect(message?.handleId).toBeDefined();
+
+    await messagingService.completeMessage(message?.handleId as string);
+
+    const after = await messagingService.peekSubscriptionMessages(
+      rxTopicName,
+      rxSubscriptionName,
+      10,
+      0,
+    );
+    expect(after.find((m) => m.messageId === "msg-sub-rx-1")).toBeUndefined();
+  });
+
+  test("dead-lettering a subscription message makes it visible on the subscription DLQ", async () => {
+    await messagingService.sendMessage(rxTopicName, {
+      body: "dead letter me",
+      bodyMode: "text",
+      messageId: "msg-sub-rx-dlq-1",
+    });
+
+    const received = await messagingService.receiveSubscriptionMessages(
+      rxTopicName,
+      rxSubscriptionName,
+      10,
+      "peekLock",
+      5000,
+    );
+    const message = received.find((m) => m.messageId === "msg-sub-rx-dlq-1");
+    expect(message?.handleId).toBeDefined();
+
+    await messagingService.deadLetterMessage(message?.handleId as string, "manual", "test");
+
+    const dlq = await messagingService.peekSubscriptionMessages(
+      rxTopicName,
+      rxSubscriptionName,
+      10,
+      0,
+      true,
+    );
+    expect(dlq.find((m) => m.messageId === "msg-sub-rx-dlq-1")).toBeDefined();
+  });
+});

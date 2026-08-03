@@ -160,6 +160,8 @@ export interface IpcChannels {
       subscriptionName: string
       maxCount: number
       fromSequenceNumber?: number
+      /** Peek the subscription's dead-letter sub-queue instead of the subscription itself. */
+      deadLetter?: boolean
     }
     response: Result<ReceivedMessageDescription[]>
   }
@@ -179,6 +181,8 @@ export interface IpcChannels {
       subscriptionName: string
       maxCount: number
       fromSequenceNumber?: number
+      /** Count the subscription's dead-letter sub-queue instead of the subscription itself. */
+      deadLetter?: boolean
     }
     response: Result<number>
   }
@@ -189,6 +193,19 @@ export interface IpcChannels {
       maxCount: number
       mode: ReceiveMode
       maxWaitTimeMs: number
+    }
+    response: Result<ReceivedMessageDescription[]>
+  }
+  'messages:receiveSubscription': {
+    request: {
+      profileId: string
+      topicName: string
+      subscriptionName: string
+      maxCount: number
+      mode: ReceiveMode
+      maxWaitTimeMs: number
+      /** Receive from the subscription's dead-letter sub-queue instead of the subscription. */
+      deadLetter?: boolean
     }
     response: Result<ReceivedMessageDescription[]>
   }
