@@ -42,6 +42,23 @@ describe('purgeEntity', () => {
     expect(terminal.deletedCount).toBe(5)
   })
 
+  test('a receive failure (e.g. connection closed mid-purge) rejects immediately', async () => {
+    // Pins the behavior that lets messages:purge:start's catch report done+error to the
+    // renderer: a failing receive must abort the drain loop on the spot, not keep
+    // iterating toward the cap against a dead connection.
+    let calls = 0
+    const failing = {
+      async receiveMessages(): Promise<ReceivedMessageDescription[]> {
+        calls++
+        if (calls === 1) return [msg(0)]
+        throw new Error('connection closed')
+      }
+    } as unknown as MessagingService
+
+    await expect(purgeEntity(failing, 'q', () => {})).rejects.toThrow('connection closed')
+    expect(calls).toBe(2)
+  })
+
   test('reports stoppedAtCap when the iteration cap is hit (F6)', async () => {
     const events: PurgeProgress[] = []
     const total = await purgeEntity(bottomlessMessaging(), 'q', (p) => events.push(p))
