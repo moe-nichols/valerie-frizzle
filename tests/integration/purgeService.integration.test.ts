@@ -1,70 +1,63 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus'
-import { startAdminHttpsProxy, buildAdminConnectionString, type AdminHttpsProxy } from '../../src/main/services/adminHttpsProxy'
-import { AdminService } from '../../src/main/services/adminService'
-import { MessagingService } from '../../src/main/services/messagingService'
-import { purgeEntity, type PurgeProgress } from '../../src/main/services/purgeService'
-import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from './harness'
+import type { AdminService } from '../../src/main/services/adminService'
+import type { MessagingService } from '../../src/main/services/messagingService'
+import { type PurgeProgress, purgeEntity } from '../../src/main/services/purgeService'
+import { connectToTestEmulator, type TestEmulatorClient } from './testClient'
 
-let proxy: AdminHttpsProxy;
-let adminService: AdminService;
-let sbClient: ServiceBusClient;
-let messagingService: MessagingService;
-const queueName = `test-purge-queue-${Date.now()}`;
+let client: TestEmulatorClient
+let adminService: AdminService
+let messagingService: MessagingService
+const queueName = `test-purge-queue-${Date.now()}`
 
 beforeAll(async () => {
-  proxy = await startAdminHttpsProxy(TEST_MANAGEMENT_PORT);
-  const adminConnectionString = buildAdminConnectionString(TEST_MESSAGING_CONNECTION_STRING, proxy.url);
-  const adminClient = new ServiceBusAdministrationClient(adminConnectionString, {
-    tlsOptions: { ca: proxy.caCert },
-  });
-  adminService = new AdminService(adminClient);
-  await adminService.createQueue({ name: queueName });
-
-  sbClient = new ServiceBusClient(TEST_MESSAGING_CONNECTION_STRING);
-  messagingService = new MessagingService(sbClient);
-});
+  client = await connectToTestEmulator()
+  ;({ adminService, messagingService } = client)
+  await adminService.createQueue({ name: queueName })
+})
 
 afterAll(async () => {
-  await messagingService.close();
-  await sbClient.close();
-  await adminService.deleteQueue(queueName);
-  await proxy.close();
-});
+  // Release any open receivers before deleting the entities they point at; close() is
+  // idempotent, so client.close() calling it again is harmless.
+  await messagingService.close()
+  await adminService.deleteQueue(queueName)
+  await client.close()
+})
 
-describe("purgeService", () => {
-  test("drains all messages from a queue and reports progress", async () => {
-    const messageCount = 15;
+describe('purgeService', () => {
+  test('drains all messages from a queue and reports progress', async () => {
+    const messageCount = 15
     for (let i = 0; i < messageCount; i++) {
-      await messagingService.sendMessage(queueName, { body: `msg-${i}`, bodyMode: "text" });
+      await messagingService.sendMessage(queueName, { body: `msg-${i}`, bodyMode: 'text' })
     }
 
-    expect(await messagingService.peekMessages(queueName, messageCount + 5)).toHaveLength(messageCount);
+    expect(await messagingService.peekMessages(queueName, messageCount + 5)).toHaveLength(
+      messageCount
+    )
 
-    const progressEvents: PurgeProgress[] = [];
+    const progressEvents: PurgeProgress[] = []
     const totalDeleted = await purgeEntity(messagingService, queueName, (progress) => {
-      progressEvents.push(progress);
-    });
+      progressEvents.push(progress)
+    })
 
-    expect(totalDeleted).toBe(messageCount);
-    expect(progressEvents.length).toBeGreaterThan(0);
+    expect(totalDeleted).toBe(messageCount)
+    expect(progressEvents.length).toBeGreaterThan(0)
     expect(progressEvents[progressEvents.length - 1]).toEqual({
       deletedCount: messageCount,
       done: true,
-      stoppedAtCap: false,
-    });
+      stoppedAtCap: false
+    })
 
-    const remaining = await messagingService.peekMessages(queueName, 10);
-    expect(remaining).toHaveLength(0);
-  });
+    const remaining = await messagingService.peekMessages(queueName, 10)
+    expect(remaining).toHaveLength(0)
+  })
 
-  test("purging an already-empty queue completes immediately with zero deletions", async () => {
-    const progressEvents: PurgeProgress[] = [];
+  test('purging an already-empty queue completes immediately with zero deletions', async () => {
+    const progressEvents: PurgeProgress[] = []
     const totalDeleted = await purgeEntity(messagingService, queueName, (progress) => {
-      progressEvents.push(progress);
-    });
+      progressEvents.push(progress)
+    })
 
-    expect(totalDeleted).toBe(0);
-    expect(progressEvents).toEqual([{ deletedCount: 0, done: true, stoppedAtCap: false }]);
-  });
-});
+    expect(totalDeleted).toBe(0)
+    expect(progressEvents).toEqual([{ deletedCount: 0, done: true, stoppedAtCap: false }])
+  })
+})

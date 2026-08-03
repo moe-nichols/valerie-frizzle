@@ -1,12 +1,7 @@
+import { DEFAULT_THEME, type Theme } from '@shared/theme'
 import type { PreferencesRepo } from './db/preferencesRepo'
 
 const PREFERENCE_KEY = 'theme'
-
-export type Theme = 'light' | 'dark'
-
-// The app shipped dark-only (index.html sets class="dark"), so dark stays the default for
-// anything missing or malformed — matching the pre-toggle behavior.
-export const DEFAULT_THEME: Theme = 'dark'
 
 /** Pure — normalizes whatever's stored to a known theme, falling back to the default.
  * Kept separate from load/save so it's unit-testable without a database, mirroring
@@ -19,8 +14,9 @@ export function loadTheme(preferencesRepo: PreferencesRepo): Theme {
   return parseTheme(preferencesRepo.get(PREFERENCE_KEY))
 }
 
+// No re-parse on save: `theme` is already constrained by its type and the IPC schema
+// (z.enum) — the read-path parseTheme is what defends against a hand-edited database.
 export function saveTheme(preferencesRepo: PreferencesRepo, theme: Theme): Theme {
-  const normalized = parseTheme(theme)
-  preferencesRepo.set(PREFERENCE_KEY, normalized)
-  return normalized
+  preferencesRepo.set(PREFERENCE_KEY, theme)
+  return theme
 }

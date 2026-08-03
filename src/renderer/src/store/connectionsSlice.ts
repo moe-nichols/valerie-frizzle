@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { ConnectionProfile } from '@shared/domain'
+import type { RootState } from './store'
 
 interface ConnectionsState {
   profiles: ConnectionProfile[]
@@ -21,6 +22,13 @@ const initialState: ConnectionsState = {
 
 function without(ids: string[], id: string): string[] {
   return ids.filter((existing) => existing !== id)
+}
+
+/** Any change of which profile is selected (or connected) invalidates the entity
+ * selection — the active queue/topic belongs to the profile it was selected under. */
+function clearActiveSelections(state: ConnectionsState): void {
+  state.activeQueueName = null
+  state.activeTopicName = null
 }
 
 export const fetchProfiles = createAsyncThunk<ConnectionProfile[], void, { rejectValue: string }>(
@@ -66,7 +74,7 @@ export const disconnectProfile = createAsyncThunk<string, string, { rejectValue:
 export const deleteProfile = createAsyncThunk<string, string, { rejectValue: string }>(
   'connections/deleteProfile',
   async (id, { rejectWithValue, getState }) => {
-    const state = getState() as { connections: ConnectionsState }
+    const state = getState() as RootState
     if (state.connections.connectedIds.includes(id)) {
       const disconnectResponse = await window.sbAdmin.connections.disconnect(id)
       if (!disconnectResponse.ok) return rejectWithValue(disconnectResponse.error.message)
@@ -84,15 +92,20 @@ const connectionsSlice = createSlice({
     // Select an already-connected profile — instant, no IPC round trip.
     profileSelected(state, action: PayloadAction<string>) {
       state.selectedProfileId = action.payload
-      state.activeQueueName = null
-      state.activeTopicName = null
+      clearActiveSelections(state)
     },
     queueSelected(state, action: PayloadAction<string>) {
       state.activeQueueName = action.payload
       state.activeTopicName = null
     },
-    queueDeleted(state, action: PayloadAction<string>) {
-      if (state.activeQueueName === action.payload) {
+    // Deletions are scoped to a profile: several connected profiles' entity trees render
+    // at once, and an entity named like the selected profile's must not clear a selection
+    // that actually belongs to a different profile.
+    queueDeleted(state, action: PayloadAction<{ profileId: string; name: string }>) {
+      if (
+        state.selectedProfileId === action.payload.profileId &&
+        state.activeQueueName === action.payload.name
+      ) {
         state.activeQueueName = null
       }
     },
@@ -100,8 +113,30 @@ const connectionsSlice = createSlice({
       state.activeTopicName = action.payload
       state.activeQueueName = null
     },
-    topicDeleted(state, action: PayloadAction<string>) {
-      if (state.activeTopicName === action.payload) {
+    topicDeleted(state, action: PayloadAction<{ profileId: string; name: string }>) {
+      if (
+        state.selectedProfileId === action.payload.profileId &&
+        state.activeTopicName === action.payload.name
+      ) {
+        state.activeTopicName = null
+      }
+    },
+    // A queue/topic that disappeared server-side (deleted from outside this app, or by
+    // another connection to the same emulator) should stop being "active" here too — an
+    // open panel for it would otherwise keep showing stale data forever. The entity tree
+    // reports each fresh listing and this clears any selection the listing no longer
+    // contains; keeping the rule in the slice means the component doesn't have to diff
+    // old state against new.
+    entitiesRefreshed(
+      state,
+      action: PayloadAction<{ profileId: string; queueNames?: string[]; topicNames?: string[] }>
+    ) {
+      const { profileId, queueNames, topicNames } = action.payload
+      if (state.selectedProfileId !== profileId) return
+      if (state.activeQueueName && queueNames && !queueNames.includes(state.activeQueueName)) {
+        state.activeQueueName = null
+      }
+      if (state.activeTopicName && topicNames && !topicNames.includes(state.activeTopicName)) {
         state.activeTopicName = null
       }
     }
@@ -121,8 +156,7 @@ const connectionsSlice = createSlice({
         state.connectingIds = without(state.connectingIds, action.payload)
         state.connectedIds.push(action.payload)
         state.selectedProfileId = action.payload
-        state.activeQueueName = null
-        state.activeTopicName = null
+        clearActiveSelections(state)
       })
       .addCase(selectProfile.rejected, (state, action) => {
         state.connectingIds = without(state.connectingIds, action.meta.arg)
@@ -131,8 +165,7 @@ const connectionsSlice = createSlice({
         state.connectedIds = without(state.connectedIds, action.payload)
         if (state.selectedProfileId === action.payload) {
           state.selectedProfileId = null
-          state.activeQueueName = null
-          state.activeTopicName = null
+          clearActiveSelections(state)
         }
       })
       .addCase(deleteProfile.fulfilled, (state, action) => {
@@ -140,13 +173,18 @@ const connectionsSlice = createSlice({
         state.profiles = state.profiles.filter((profile) => profile.id !== action.payload)
         if (state.selectedProfileId === action.payload) {
           state.selectedProfileId = null
-          state.activeQueueName = null
-          state.activeTopicName = null
+          clearActiveSelections(state)
         }
       })
   }
 })
 
-export const { profileSelected, queueSelected, queueDeleted, topicSelected, topicDeleted } =
-  connectionsSlice.actions
+export const {
+  profileSelected,
+  queueSelected,
+  queueDeleted,
+  topicSelected,
+  topicDeleted,
+  entitiesRefreshed
+} = connectionsSlice.actions
 export const connectionsReducer = connectionsSlice.reducer

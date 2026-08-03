@@ -1,23 +1,20 @@
-import { useEffect, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
-import type { QueueDescription } from '@shared/domain'
-import { buildDeadLetterQueuePath } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
-import { Button } from '@renderer/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import {
   fetchQueueMessageCount,
   formatMessageCount,
   type MessageCountResult
 } from '@renderer/lib/messageCount'
-import { useIsCurrent } from '@renderer/lib/useIsCurrent'
-import { usePolling } from '@renderer/lib/usePolling'
-import { useAppSelector } from '@renderer/store/hooks'
+import type { QueueDescription } from '@shared/domain'
+import { buildDeadLetterQueuePath } from '@shared/domain'
+import { useState } from 'react'
 import { MessageBrowser } from '../messages/MessageBrowser'
 import { MessageComposer } from '../messages/MessageComposer'
+import { PanelRefreshControls } from './PanelRefreshControls'
 import { QueuePurgeControl } from './QueuePurgeControl'
+import { reportRefreshError, useEntityPanel } from './useEntityPanel'
 
 interface QueuePanelProps {
   profileId: string
@@ -25,17 +22,26 @@ interface QueuePanelProps {
 }
 
 export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX.Element {
-  const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
   const [queue, setQueue] = useState<QueueDescription | null>(null)
   const [count, setCount] = useState<MessageCountResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
-  const isCurrent = useIsCurrent(`${profileId}::${queueName}`)
 
   // `viaPoll` routes background (timer-driven) failures to a toast instead of the inline
   // banner, so a transient blip during polling is noticed without pinning an alert the next
   // successful poll would just clear.
-  async function refresh(viaPoll = false): Promise<void> {
+  const { isCurrent, refresh } = useEntityPanel(
+    `${profileId}::${queueName}`,
+    (viaPoll) => fetchQueue(viaPoll),
+    () => {
+      setQueue(null)
+      setCount(null)
+      setError(null)
+      setLastRefreshed(null)
+    }
+  )
+
+  async function fetchQueue(viaPoll: boolean): Promise<void> {
     const [queueResponse, countResult] = await Promise.all([
       window.sbAdmin.entities.queues.get(profileId, queueName),
       fetchQueueMessageCount(profileId, queueName)
@@ -47,24 +53,15 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
       setQueue(queueResponse.data)
       setError(null)
       setLastRefreshed(new Date())
-    } else if (viaPoll) {
-      toast.error(`Failed to refresh ${queueName}: ${queueResponse.error.message}`)
     } else {
-      setError(queueResponse.error.message)
+      reportRefreshError(
+        `Failed to refresh ${queueName}: ${queueResponse.error.message}`,
+        viaPoll,
+        setError
+      )
     }
     if (countResult) setCount(countResult)
   }
-
-  useEffect(() => {
-    setQueue(null)
-    setCount(null)
-    setError(null)
-    setLastRefreshed(null)
-    refresh()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileId, queueName])
-
-  usePolling(() => refresh(true), pollIntervalMs)
 
   return (
     <Card>
@@ -73,21 +70,7 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
           {queueName}
           {count && <Badge variant="secondary">{formatMessageCount(count)} active</Badge>}
           <QueuePurgeControl profileId={profileId} entityPath={queueName} />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            title="Refresh now"
-            onClick={() => refresh()}
-          >
-            <RefreshCw />
-            <span className="sr-only">Refresh now</span>
-          </Button>
-          {lastRefreshed && (
-            <span className="text-muted-foreground text-xs font-normal">
-              Updated {lastRefreshed.toLocaleTimeString()}
-            </span>
-          )}
+          <PanelRefreshControls onRefresh={() => refresh()} lastRefreshed={lastRefreshed} />
         </CardTitle>
         {queue && (
           <p className="text-muted-foreground text-sm">
@@ -101,13 +84,27 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        {!queue && !error && (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-72" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+        )}
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Send</h3>
-          <MessageComposer profileId={profileId} entityPath={queueName} />
+          {/* Keyed so a half-composed draft doesn't silently carry over to another entity. */}
+          <MessageComposer
+            key={`${profileId}::${queueName}`}
+            profileId={profileId}
+            entityPath={queueName}
+          />
         </div>
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Browse</h3>
-          <MessageBrowser profileId={profileId} source={{ kind: 'entity', entityPath: queueName }} />
+          <MessageBrowser
+            profileId={profileId}
+            source={{ kind: 'entity', entityPath: queueName }}
+          />
         </div>
         <div className="space-y-3">
           <h3 className="flex flex-wrap items-center gap-2 text-lg font-medium">

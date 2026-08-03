@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Settings } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
+import { Settings } from 'lucide-react'
+import { useState } from 'react'
 import { SettingsDialog } from './SettingsDialog'
 
 export function SettingsButton(): React.JSX.Element {

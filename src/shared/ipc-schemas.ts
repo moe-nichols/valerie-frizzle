@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { IpcChannels } from './ipc-contract'
+import { MAX_POLL_INTERVAL_MS, MIN_POLL_INTERVAL_MS } from './pollInterval'
 
 /**
  * Runtime validation for every IPC request payload. The `IpcChannels` request types are
@@ -133,10 +134,12 @@ const createRuleInput = z.object({
 export const ipcRequestSchemas: {
   [K in keyof IpcChannels]: z.ZodType<IpcChannels[K]['request']>
 } = {
-  'app:ping': z.object({ message: z.string() }),
-
   'preferences:pollInterval:get': z.undefined(),
-  'preferences:pollInterval:set': z.object({ pollIntervalMs: z.number().int().positive() }),
+  'preferences:pollInterval:set': z.object({
+    // Enforced here so an out-of-range value is an honest VALIDATION_ERROR at the boundary
+    // instead of being silently clamped after passing validation.
+    pollIntervalMs: z.number().int().min(MIN_POLL_INTERVAL_MS).max(MAX_POLL_INTERVAL_MS)
+  }),
 
   'preferences:theme:get': z.undefined(),
   'preferences:theme:set': z.object({ theme: z.enum(['light', 'dark']) }),

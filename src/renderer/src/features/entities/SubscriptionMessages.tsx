@@ -1,10 +1,10 @@
-import { useState } from 'react'
 import { Button } from '@renderer/components/ui/button'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger
 } from '@renderer/components/ui/collapsible'
+import { useState } from 'react'
 import { MessageBrowser } from '../messages/MessageBrowser'
 
 interface SubscriptionMessagesProps {

@@ -1,9 +1,11 @@
 import * as SelectPrimitive from '@radix-ui/react-select'
+import { cn } from '@renderer/lib/utils'
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react'
 import type * as React from 'react'
-import { cn } from '@renderer/lib/utils'
 
-function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>): React.JSX.Element {
+function Select({
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Root>): React.JSX.Element {
   return <SelectPrimitive.Root data-slot="select" {...props} />
 }
 

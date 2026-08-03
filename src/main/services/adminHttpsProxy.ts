@@ -1,5 +1,6 @@
-import { createServer, type Server } from 'node:https'
 import { request as httpRequest } from 'node:http'
+import { createServer, type Server } from 'node:https'
+import { AppError } from '@shared/errors'
 import { generate } from 'selfsigned'
 
 // ServiceBusAdministrationClient (the JS/TS @azure/service-bus SDK) hardcodes `https://`
@@ -82,8 +83,16 @@ export function buildAdminConnectionString(
   adminProxyUrl: string
 ): string {
   const parts = messagingConnectionString.split(';').filter(Boolean)
-  const rebuilt = parts.map((part) =>
-    part.startsWith('Endpoint=') ? `Endpoint=${adminProxyUrl.replace(/^https:\/\//, 'sb://')}` : part
-  )
+  let rewrote = false
+  const rebuilt = parts.map((part) => {
+    if (!part.startsWith('Endpoint=')) return part
+    rewrote = true
+    return `Endpoint=${adminProxyUrl.replace(/^https:\/\//, 'sb://')}`
+  })
+  if (!rewrote) {
+    // Silently returning the input would point the admin client at the emulator directly
+    // (or nowhere) instead of the proxy — fail loudly at connect time instead.
+    throw new AppError('VALIDATION_ERROR', 'connection string has no Endpoint= to rewrite')
+  }
   return `${rebuilt.join(';')};`
 }

@@ -1,16 +1,7 @@
-import { useState } from 'react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@renderer/components/ui/alert-dialog'
-import { Button, buttonVariants } from '@renderer/components/ui/button'
+import { ConfirmDialog } from '@renderer/components/ConfirmDialog'
+import { Button } from '@renderer/components/ui/button'
 import { PEEK_COUNT_CAP, PEEK_FROM_START } from '@renderer/lib/messageCount'
+import { useEffect, useRef, useState } from 'react'
 
 interface QueuePurgeControlProps {
   profileId: string
@@ -44,6 +35,26 @@ export function QueuePurgeControl({
   // "Dismiss" rather than automatically, avoids that class of bug.
   const [progress, setProgress] = useState<PurgeProgressState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The active progress subscription, so it can be torn down on unmount or entity switch —
+  // subscribing without this leaked the ipcRenderer listener whenever a purge outlived the
+  // component (e.g. the profile was disconnected mid-purge).
+  const unsubscribeRef = useRef<(() => void) | null>(null)
+
+  function stopListening(): void {
+    unsubscribeRef.current?.()
+    unsubscribeRef.current = null
+  }
+
+  // A purge and its progress belong to one entity: switching entities mid-purge (the
+  // control is not keyed) must not show the old queue's progress against the new one.
+  useEffect(() => {
+    setConfirming(false)
+    setMessageCount(null)
+    setMessageCountIsApproximate(false)
+    setProgress(null)
+    setError(null)
+    return stopListening
+  }, [profileId, entityPath])
 
   async function handlePurgeClick(): Promise<void> {
     setError(null)
@@ -73,7 +84,8 @@ export function QueuePurgeControl({
       return
     }
 
-    const unsubscribe = window.sbAdmin.messages.onPurgeProgress(
+    stopListening()
+    unsubscribeRef.current = window.sbAdmin.messages.onPurgeProgress(
       startResponse.data.jobId,
       (event) => {
         setProgress({
@@ -85,7 +97,7 @@ export function QueuePurgeControl({
           setError(event.error)
         }
         if (event.done) {
-          unsubscribe()
+          stopListening()
         }
       }
     )
@@ -112,26 +124,14 @@ export function QueuePurgeControl({
         </Button>
       )}
 
-      <AlertDialog open={confirming} onOpenChange={(open) => !open && handleCancel()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Purge messages?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Delete all {countLabel} active message{messageCount === 1 ? '' : 's'} in &quot;{label}
-              &quot;?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmPurge}
-              className={buttonVariants({ variant: 'destructive' })}
-            >
-              Yes, purge {countLabel}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={(open) => !open && handleCancel()}
+        title="Purge messages?"
+        description={`Delete all ${countLabel} active message${messageCount === 1 ? '' : 's'} in "${label}"?`}
+        confirmLabel={`Yes, purge ${countLabel}`}
+        onConfirm={handleConfirmPurge}
+      />
 
       {progress && (
         <span className="text-sm">

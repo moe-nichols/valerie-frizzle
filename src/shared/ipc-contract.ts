@@ -1,28 +1,24 @@
-import type { Result } from './errors'
 import type {
   ConnectionProfile,
-  QueueDescription,
   CreateQueueInput,
-  UpdateQueueInput,
-  TopicDescription,
-  CreateTopicInput,
-  UpdateTopicInput,
-  SubscriptionDescription,
-  CreateSubscriptionInput,
-  UpdateSubscriptionInput,
-  RuleDescription,
   CreateRuleInput,
-  UpdateRuleInput,
+  CreateSubscriptionInput,
+  CreateTopicInput,
   MessageEnvelope,
+  QueueDescription,
   ReceivedMessageDescription,
-  ReceiveMode
+  ReceiveMode,
+  RuleDescription,
+  SubscriptionDescription,
+  TopicDescription,
+  UpdateQueueInput,
+  UpdateRuleInput,
+  UpdateSubscriptionInput,
+  UpdateTopicInput
 } from './domain'
+import type { Result } from './errors'
 
 export interface IpcChannels {
-  'app:ping': {
-    request: { message: string }
-    response: Result<{ echo: string; timestamp: number }>
-  }
   'preferences:pollInterval:get': {
     request: undefined
     response: Result<number>

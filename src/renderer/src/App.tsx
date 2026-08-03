@@ -1,5 +1,4 @@
-import { useEffect } from 'react'
-import { Radio } from 'lucide-react'
+import { EmptyState } from '@renderer/components/EmptyState'
 import {
   Sidebar,
   SidebarContent,
@@ -10,12 +9,15 @@ import {
   SidebarTrigger
 } from '@renderer/components/ui/sidebar'
 import { Toaster } from '@renderer/components/ui/sonner'
+import { Radio } from 'lucide-react'
+import { useEffect } from 'react'
+import { toast } from 'sonner'
 import { ConnectionSidebar } from './features/connections/ConnectionSidebar'
 import { QueuePanel } from './features/entities/QueuePanel'
 import { TopicPanel } from './features/entities/TopicPanel'
 import { SettingsButton } from './features/settings/SettingsButton'
-import { fetchPollInterval, fetchTheme } from './store/settingsSlice'
 import { useAppDispatch, useAppSelector } from './store/hooks'
+import { fetchPollInterval, fetchTheme } from './store/settingsSlice'
 
 function App(): React.JSX.Element {
   const dispatch = useAppDispatch()
@@ -26,6 +28,11 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     dispatch(fetchPollInterval())
+      .unwrap()
+      .catch((message: string) => {
+        // The slice already fell back to the default interval; this just tells the user.
+        toast.error(`Could not load the refresh-interval setting: ${message}. Using the default.`)
+      })
     dispatch(fetchTheme())
   }, [dispatch])
 
@@ -70,15 +77,11 @@ function App(): React.JSX.Element {
                 <TopicPanel profileId={selectedProfileId} topicName={activeTopicName} />
               )}
               {!activeQueueName && !activeTopicName && (
-                <p className="text-muted-foreground text-sm">
-                  Select a queue or topic in the sidebar to get started.
-                </p>
+                <EmptyState message="Select a queue or topic in the sidebar to get started." />
               )}
             </>
           ) : (
-            <p className="text-muted-foreground text-sm">
-              Select or connect to a profile in the sidebar to get started.
-            </p>
+            <EmptyState message="Select or connect to a profile in the sidebar to get started." />
           )}
         </div>
       </SidebarInset>

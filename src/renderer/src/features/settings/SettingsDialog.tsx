@@ -1,4 +1,3 @@
-import { useEffect, useState, type FormEvent } from 'react'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -18,8 +17,14 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
-import { updatePollInterval, updateTheme } from '@renderer/store/settingsSlice'
+import { parseEnum } from '@renderer/lib/parseEnum'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
+import { updatePollInterval, updateTheme } from '@renderer/store/settingsSlice'
+import { MAX_POLL_INTERVAL_MS, MIN_POLL_INTERVAL_MS } from '@shared/pollInterval'
+import { type FormEvent, useEffect, useState } from 'react'
+
+const MIN_SECONDS = MIN_POLL_INTERVAL_MS / 1000
+const MAX_SECONDS = MAX_POLL_INTERVAL_MS / 1000
 
 interface SettingsDialogProps {
   open: boolean
@@ -45,8 +50,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
   async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault()
     const seconds = Number(pollIntervalSeconds)
-    if (!Number.isFinite(seconds) || seconds <= 0) {
-      setError('Enter a positive number of seconds.')
+    if (!Number.isFinite(seconds) || seconds < MIN_SECONDS || seconds > MAX_SECONDS) {
+      setError(`Enter between ${MIN_SECONDS} and ${MAX_SECONDS} seconds.`)
       return
     }
     const result = await dispatch(updatePollInterval(Math.round(seconds * 1000)))
@@ -79,8 +84,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
             <Input
               id="poll-interval-seconds"
               type="number"
-              min="2"
-              max="300"
+              min={MIN_SECONDS}
+              max={MAX_SECONDS}
               step="1"
               value={pollIntervalSeconds}
               onChange={(event) => setPollIntervalSeconds(event.target.value)}
@@ -93,7 +98,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                 not gated behind the poll-interval Save button. */}
             <Select
               value={theme ?? 'dark'}
-              onValueChange={(value) => dispatch(updateTheme(value as 'light' | 'dark'))}
+              onValueChange={(value) =>
+                dispatch(updateTheme(parseEnum(['light', 'dark'], value, 'dark')))
+              }
             >
               <SelectTrigger className="w-40">
                 <SelectValue />

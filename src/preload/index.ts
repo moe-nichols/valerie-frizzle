@@ -1,9 +1,17 @@
-import { contextBridge, ipcRenderer } from 'electron'
 import {
-  PURGE_PROGRESS_CHANNEL,
   type IpcChannels,
+  PURGE_PROGRESS_CHANNEL,
   type PurgeProgressEvent
 } from '@shared/ipc-contract'
+import { contextBridge, ipcRenderer } from 'electron'
+import { createPurgeProgressHub } from './purgeProgressHub'
+
+// One persistent listener feeds the hub so events arriving before the renderer subscribes
+// (purge:start resolves only after the drain has begun) are buffered instead of dropped.
+const purgeProgressHub = createPurgeProgressHub()
+ipcRenderer.on(PURGE_PROGRESS_CHANNEL, (_event, data: PurgeProgressEvent) => {
+  purgeProgressHub.deliver(data)
+})
 
 function invoke<K extends keyof IpcChannels>(
   channel: K,
@@ -13,9 +21,6 @@ function invoke<K extends keyof IpcChannels>(
 }
 
 const api = {
-  app: {
-    ping: (message: string) => invoke('app:ping', { message })
-  },
   preferences: {
     getPollInterval: () => invoke('preferences:pollInterval:get', undefined),
     setPollInterval: (pollIntervalMs: number) =>
@@ -177,16 +182,8 @@ const api = {
       invoke('messages:deadLetter', { profileId, handleId, reason, description }),
     purgeStart: (profileId: string, entityPath: string) =>
       invoke('messages:purge:start', { profileId, entityPath }),
-    onPurgeProgress: (
-      jobId: string,
-      callback: (event: PurgeProgressEvent) => void
-    ): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, data: PurgeProgressEvent): void => {
-        if (data.jobId === jobId) callback(data)
-      }
-      ipcRenderer.on(PURGE_PROGRESS_CHANNEL, listener)
-      return () => ipcRenderer.off(PURGE_PROGRESS_CHANNEL, listener)
-    },
+    onPurgeProgress: (jobId: string, callback: (event: PurgeProgressEvent) => void): (() => void) =>
+      purgeProgressHub.subscribe(jobId, callback),
     resubmit: (
       profileId: string,
       handleId: string,

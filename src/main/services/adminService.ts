@@ -1,28 +1,28 @@
 import type {
-  ServiceBusAdministrationClient,
+  CorrelationRuleFilter,
   QueueProperties,
-  TopicProperties,
-  SubscriptionProperties,
   RuleProperties,
+  ServiceBusAdministrationClient,
   SqlRuleAction,
   SqlRuleFilter,
-  CorrelationRuleFilter
+  SubscriptionProperties,
+  TopicProperties
 } from '@azure/service-bus'
 import type {
-  QueueDescription,
   CreateQueueInput,
-  UpdateQueueInput,
-  TopicDescription,
-  CreateTopicInput,
-  UpdateTopicInput,
-  SubscriptionDescription,
-  CreateSubscriptionInput,
-  UpdateSubscriptionInput,
-  RuleDescription,
   CreateRuleInput,
-  UpdateRuleInput,
+  CreateSubscriptionInput,
+  CreateTopicInput,
+  QueueDescription,
+  RuleDescription,
   RuleFilterInput,
-  SqlRuleActionInput
+  SqlRuleActionInput,
+  SubscriptionDescription,
+  TopicDescription,
+  UpdateQueueInput,
+  UpdateRuleInput,
+  UpdateSubscriptionInput,
+  UpdateTopicInput
 } from '@shared/domain'
 
 function toQueueDescription(props: QueueProperties): QueueDescription {
@@ -109,6 +109,16 @@ function fromRuleActionInput(action: SqlRuleActionInput | undefined): SqlRuleAct
   return action ? { sqlExpression: action.sqlExpression } : {}
 }
 
+/** Drains one of the SDK's paged async iterables through a mapper — the shared body of
+ * every list method. */
+async function collect<T, R>(iterable: AsyncIterable<T>, map: (item: T) => R): Promise<R[]> {
+  const results: R[] = []
+  for await (const item of iterable) {
+    results.push(map(item))
+  }
+  return results
+}
+
 /**
  * The emulator's PUT (update) responses for queues/topics are consistently missing
  * several fields the SDK's Atom/XML deserializer requires (confirmed via direct
@@ -133,6 +143,22 @@ async function runUpdateWithEmulatorParseWorkaround<T>(
   }
 }
 
+/** The fetch-merge-put-map cycle shared by every update method: the SDK requires the full
+ * properties object (fetch, mutate, put back) rather than a partial patch — see
+ * ServiceBusAdministrationClient.updateQueue's docs — and the put goes through the
+ * emulator PARSE_ERROR workaround above. */
+async function runMergedUpdate<TRaw, TOut>(
+  get: () => Promise<TRaw>,
+  put: (merged: TRaw) => Promise<TRaw>,
+  input: Partial<TRaw>,
+  toDescription: (raw: TRaw) => TOut
+): Promise<TOut> {
+  const existing = await get()
+  const merged = { ...existing, ...input }
+  const updated = await runUpdateWithEmulatorParseWorkaround(() => put(merged), get)
+  return toDescription(updated)
+}
+
 /**
  * No `getActiveMessageCount`/runtime-properties method here on purpose. The emulator's
  * GET-queue response has no `CountDetails`/`SizeInBytes`/`AccessedAt` at all (confirmed
@@ -152,11 +178,7 @@ export class AdminService {
   constructor(private client: ServiceBusAdministrationClient) {}
 
   async listQueues(): Promise<QueueDescription[]> {
-    const queues: QueueDescription[] = []
-    for await (const queue of this.client.listQueues()) {
-      queues.push(toQueueDescription(queue))
-    }
-    return queues
+    return collect(this.client.listQueues(), toQueueDescription)
   }
 
   async getQueue(name: string): Promise<QueueDescription> {
@@ -169,15 +191,12 @@ export class AdminService {
   }
 
   async updateQueue(name: string, input: UpdateQueueInput): Promise<QueueDescription> {
-    // The SDK requires the full properties object (fetch, mutate, put back) rather
-    // than a partial patch — see ServiceBusAdministrationClient.updateQueue's docs.
-    const existing = await this.client.getQueue(name)
-    const merged = { ...existing, ...input }
-    const updated = await runUpdateWithEmulatorParseWorkaround(
-      () => this.client.updateQueue(merged),
-      () => this.client.getQueue(name)
+    return runMergedUpdate(
+      () => this.client.getQueue(name),
+      (merged) => this.client.updateQueue(merged),
+      input,
+      toQueueDescription
     )
-    return toQueueDescription(updated)
   }
 
   async deleteQueue(name: string): Promise<void> {
@@ -185,11 +204,7 @@ export class AdminService {
   }
 
   async listTopics(): Promise<TopicDescription[]> {
-    const topics: TopicDescription[] = []
-    for await (const topic of this.client.listTopics()) {
-      topics.push(toTopicDescription(topic))
-    }
-    return topics
+    return collect(this.client.listTopics(), toTopicDescription)
   }
 
   async getTopic(name: string): Promise<TopicDescription> {
@@ -202,13 +217,12 @@ export class AdminService {
   }
 
   async updateTopic(name: string, input: UpdateTopicInput): Promise<TopicDescription> {
-    const existing = await this.client.getTopic(name)
-    const merged = { ...existing, ...input }
-    const updated = await runUpdateWithEmulatorParseWorkaround(
-      () => this.client.updateTopic(merged),
-      () => this.client.getTopic(name)
+    return runMergedUpdate(
+      () => this.client.getTopic(name),
+      (merged) => this.client.updateTopic(merged),
+      input,
+      toTopicDescription
     )
-    return toTopicDescription(updated)
   }
 
   async deleteTopic(name: string): Promise<void> {
@@ -216,14 +230,13 @@ export class AdminService {
   }
 
   async listSubscriptions(topicName: string): Promise<SubscriptionDescription[]> {
-    const subscriptions: SubscriptionDescription[] = []
-    for await (const subscription of this.client.listSubscriptions(topicName)) {
-      subscriptions.push(toSubscriptionDescription(subscription))
-    }
-    return subscriptions
+    return collect(this.client.listSubscriptions(topicName), toSubscriptionDescription)
   }
 
-  async getSubscription(topicName: string, subscriptionName: string): Promise<SubscriptionDescription> {
+  async getSubscription(
+    topicName: string,
+    subscriptionName: string
+  ): Promise<SubscriptionDescription> {
     return toSubscriptionDescription(await this.client.getSubscription(topicName, subscriptionName))
   }
 
@@ -239,13 +252,12 @@ export class AdminService {
     subscriptionName: string,
     input: UpdateSubscriptionInput
   ): Promise<SubscriptionDescription> {
-    const existing = await this.client.getSubscription(topicName, subscriptionName)
-    const merged = { ...existing, ...input }
-    const updated = await runUpdateWithEmulatorParseWorkaround(
-      () => this.client.updateSubscription(merged),
-      () => this.client.getSubscription(topicName, subscriptionName)
+    return runMergedUpdate(
+      () => this.client.getSubscription(topicName, subscriptionName),
+      (merged) => this.client.updateSubscription(merged),
+      input,
+      toSubscriptionDescription
     )
-    return toSubscriptionDescription(updated)
   }
 
   async deleteSubscription(topicName: string, subscriptionName: string): Promise<void> {
@@ -253,11 +265,9 @@ export class AdminService {
   }
 
   async listRules(topicName: string, subscriptionName: string): Promise<RuleDescription[]> {
-    const rules: RuleDescription[] = []
-    for await (const rule of this.client.listRules(topicName, subscriptionName)) {
-      rules.push(toRuleDescription(topicName, subscriptionName, rule))
-    }
-    return rules
+    return collect(this.client.listRules(topicName, subscriptionName), (rule) =>
+      toRuleDescription(topicName, subscriptionName, rule)
+    )
   }
 
   async createRule(input: CreateRuleInput): Promise<RuleDescription> {
@@ -276,19 +286,14 @@ export class AdminService {
 
   async updateRule(input: UpdateRuleInput): Promise<RuleDescription> {
     const { topicName, subscriptionName, name, filter, action } = input
-    // updateRule replaces the whole rule; the SDK wants the fetched object mutated and
-    // passed back (same fetch-mutate-put shape as the entity updates above).
-    const existing = await this.client.getRule(topicName, subscriptionName, name)
-    const merged = {
-      ...existing,
-      filter: fromRuleFilterInput(filter),
-      action: fromRuleActionInput(action)
-    }
-    const updated = await runUpdateWithEmulatorParseWorkaround(
-      () => this.client.updateRule(topicName, subscriptionName, merged),
-      () => this.client.getRule(topicName, subscriptionName, name)
+    // updateRule replaces the whole rule, so the "partial" merged in is the fully mapped
+    // filter/action pair rather than a user-supplied subset.
+    return runMergedUpdate(
+      () => this.client.getRule(topicName, subscriptionName, name),
+      (merged) => this.client.updateRule(topicName, subscriptionName, merged),
+      { filter: fromRuleFilterInput(filter), action: fromRuleActionInput(action) },
+      (raw) => toRuleDescription(topicName, subscriptionName, raw)
     )
-    return toRuleDescription(topicName, subscriptionName, updated)
   }
 
   async deleteRule(topicName: string, subscriptionName: string, name: string): Promise<void> {

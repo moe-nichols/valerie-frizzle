@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { DEFAULT_THEME, parseTheme } from '../../src/main/services/themePreference'
+import { parseTheme } from '../../src/main/services/themePreference'
+import { DEFAULT_THEME } from '../../src/shared/theme'
 
 describe('parseTheme', () => {
   test('falls back to the default when nothing is saved', () => {

@@ -1,6 +1,4 @@
-import { useState, type FormEvent } from 'react'
 import Editor from '@monaco-editor/react'
-import type { ApplicationPropertyValue, MessageEnvelope } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
@@ -12,6 +10,11 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
+import { parseEnum } from '@renderer/lib/parseEnum'
+import { useAppSelector } from '@renderer/store/hooks'
+import type { ApplicationPropertyValue, MessageEnvelope } from '@shared/domain'
+import { type FormEvent, useState } from 'react'
+import { toast } from 'sonner'
 
 interface MessageComposerProps {
   profileId: string
@@ -37,7 +40,10 @@ interface PropertyRow {
   value: string
 }
 
-export function MessageComposer({ profileId, entityPath }: MessageComposerProps): React.JSX.Element {
+export function MessageComposer({
+  profileId,
+  entityPath
+}: MessageComposerProps): React.JSX.Element {
   const [bodyMode, setBodyMode] = useState<BodyMode>('text')
   const [body, setBody] = useState('')
   const [contentType, setContentType] = useState('')
@@ -52,7 +58,7 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
   const [properties, setProperties] = useState<PropertyRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
-  const [sentAt, setSentAt] = useState<string | null>(null)
+  const appTheme = useAppSelector((state) => state.settings.theme)
 
   function handleAddProperty(): void {
     setProperties((prev) => [...prev, { key: '', value: '' }])
@@ -70,7 +76,6 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
     event.preventDefault()
     setSending(true)
     setError(null)
-    setSentAt(null)
 
     const applicationProperties: Record<string, ApplicationPropertyValue> = {}
     for (const row of properties) {
@@ -90,13 +95,14 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
       scheduledEnqueueTime: scheduledEnqueueLocal
         ? new Date(scheduledEnqueueLocal).getTime()
         : undefined,
-      applicationProperties: Object.keys(applicationProperties).length > 0 ? applicationProperties : undefined
+      applicationProperties:
+        Object.keys(applicationProperties).length > 0 ? applicationProperties : undefined
     }
 
     const response = await window.sbAdmin.messages.send(profileId, entityPath, envelope)
     setSending(false)
     if (response.ok) {
-      setSentAt(new Date().toLocaleTimeString())
+      toast.success(`Message sent to ${entityPath}`)
     } else {
       setError(response.error.message)
     }
@@ -109,11 +115,12 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {sentAt && <p className="text-sm text-emerald-600 dark:text-emerald-400">Sent at {sentAt}</p>}
-
       <div className="space-y-1.5">
         <Label>Body mode</Label>
-        <Select value={bodyMode} onValueChange={(value) => setBodyMode(value as BodyMode)}>
+        <Select
+          value={bodyMode}
+          onValueChange={(value) => setBodyMode(parseEnum(['text', 'json', 'xml'], value, 'text'))}
+        >
           <SelectTrigger className="w-32">
             <SelectValue />
           </SelectTrigger>
@@ -128,7 +135,7 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
       <div data-testid="message-body-editor" className="overflow-hidden rounded-md border">
         <Editor
           height="200px"
-          theme="vs-dark"
+          theme={appTheme === 'light' ? 'light' : 'vs-dark'}
           language={MONACO_LANGUAGE_BY_MODE[bodyMode]}
           value={body}
           onChange={(value) => setBody(value ?? '')}
@@ -147,7 +154,11 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="message-subject">Label</Label>
-          <Input id="message-subject" value={subject} onChange={(event) => setSubject(event.target.value)} />
+          <Input
+            id="message-subject"
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="message-correlation-id">Correlation ID</Label>
@@ -168,7 +179,11 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="message-reply-to">Reply to</Label>
-          <Input id="message-reply-to" value={replyTo} onChange={(event) => setReplyTo(event.target.value)} />
+          <Input
+            id="message-reply-to"
+            value={replyTo}
+            onChange={(event) => setReplyTo(event.target.value)}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="message-ttl">TTL (seconds)</Label>
@@ -213,7 +228,12 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
               value={row.value}
               onChange={(event) => handlePropertyChange(index, 'value', event.target.value)}
             />
-            <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveProperty(index)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => handleRemoveProperty(index)}
+            >
               Remove
             </Button>
           </div>

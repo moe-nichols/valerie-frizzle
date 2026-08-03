@@ -1,9 +1,9 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
-import log from 'electron-log/main'
-import { ZodError, type ZodType } from 'zod'
-import type { Result } from '@shared/errors'
+import { AppError, type Result } from '@shared/errors'
 import type { IpcChannels } from '@shared/ipc-contract'
 import { ipcRequestSchemas } from '@shared/ipc-schemas'
+import { type IpcMainInvokeEvent, ipcMain } from 'electron'
+import log from 'electron-log/main'
+import { ZodError, type ZodType } from 'zod'
 
 /** Runs fn and converts a thrown error into a Result — handlers should never let a raw
  * Error cross the IPC boundary, since Electron serializes thrown Errors lossily. Every
@@ -15,18 +15,63 @@ export async function toResult<T>(fn: () => Promise<T> | T): Promise<Result<T>> 
   try {
     return { ok: true, data: await fn() }
   } catch (err) {
-    log.error(err instanceof Error ? err : new Error(String(err)))
+    logRedacted(err)
     if (err instanceof ZodError) {
       return {
         ok: false,
         error: { code: 'VALIDATION_ERROR', message: `invalid request: ${formatZodError(err)}` }
       }
     }
-    return {
-      ok: false,
-      error: { code: 'UNEXPECTED_ERROR', message: err instanceof Error ? err.message : String(err) }
+    if (err instanceof AppError) {
+      return { ok: false, error: { code: err.code, message: err.message } }
     }
+    const message = err instanceof Error ? err.message : String(err)
+    if (isEntityNotFoundError(err)) {
+      return { ok: false, error: { code: 'NOT_FOUND', message } }
+    }
+    return { ok: false, error: { code: 'UNEXPECTED_ERROR', message } }
   }
+}
+
+/** SDK connection failures can embed the full connection string (endpoint + SAS key) in
+ * their message; the key must not land in the on-disk log file even though it's an
+ * emulator-only dev credential. */
+function redactSecrets(text: string): string {
+  return text.replace(/SharedAccessKey=[^;\s'"]+/gi, 'SharedAccessKey=<redacted>')
+}
+
+/** Expected failures must not spam the on-disk log at error level: NOT_CONNECTED is
+ * routine whenever a background poll outlives a disconnect, and other domain errors
+ * (validation, not-found, partial success) are user-facing outcomes, not app faults.
+ * Only genuinely unexpected errors keep the error level. */
+function logLevelFor(err: unknown): 'debug' | 'warn' | 'error' {
+  if (err instanceof AppError) return err.code === 'NOT_CONNECTED' ? 'debug' : 'warn'
+  if (err instanceof ZodError) return 'warn'
+  return 'error'
+}
+
+function logRedacted(err: unknown): void {
+  const level = logLevelFor(err)
+  if (err instanceof Error) {
+    log[level](`${err.name}: ${redactSecrets(err.message)}`, redactSecrets(err.stack ?? ''))
+  } else {
+    log[level](redactSecrets(String(err)))
+  }
+}
+
+/** Recognizes the "it doesn't exist" error shapes without importing SDK classes: a
+ * management RestError with HTTP 404 or a ServiceBusError coded MessagingEntityNotFound
+ * (real Azure), plus the emulator's own variant — its management API answers a missing
+ * entity with HTTP 200 and a RestError coded MessageEntityNotFoundError (pinned by
+ * adminHttpsProxy.integration.test.ts). */
+function isEntityNotFoundError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  const { statusCode, code } = err as { statusCode?: unknown; code?: unknown }
+  return (
+    statusCode === 404 ||
+    code === 'MessagingEntityNotFound' ||
+    code === 'MessageEntityNotFoundError'
+  )
 }
 
 function formatZodError(err: ZodError): string {
@@ -50,11 +95,14 @@ type ChannelHandler<K extends keyof IpcChannels> = (
 ) => Promise<ResponseData<K>> | ResponseData<K>
 
 /**
- * Registers an ipcMain handler for a channel with two guarantees baked in: the incoming
+ * Registers an ipcMain handler for a channel with three guarantees baked in: the incoming
  * payload is validated against the channel's zod schema before the handler runs (a bad
- * payload becomes a VALIDATION_ERROR Result, never an SDK call), and the handler's return
- * value / thrown error is funnelled through toResult. Handlers therefore deal only in
- * validated requests and plain return values.
+ * payload becomes a VALIDATION_ERROR Result, never an SDK call); the handler's return
+ * value / thrown error is funnelled through toResult, which preserves AppError codes and
+ * maps SDK not-found shapes so the renderer can react to *what* failed; and every failure
+ * is logged here (with connection-string secrets redacted) — the single logging choke
+ * point for the app. Handlers therefore deal only in validated requests and plain return
+ * values.
  */
 export function registerHandler<K extends keyof IpcChannels>(
   channel: K,

@@ -1,25 +1,23 @@
+import {
+  DEFAULT_POLL_INTERVAL_MS,
+  MAX_POLL_INTERVAL_MS,
+  MIN_POLL_INTERVAL_MS
+} from '@shared/pollInterval'
 import type { PreferencesRepo } from './db/preferencesRepo'
 
 const PREFERENCE_KEY = 'pollIntervalMs'
 
-export const DEFAULT_POLL_INTERVAL_MS = 10_000
-export const MIN_POLL_INTERVAL_MS = 2_000
-export const MAX_POLL_INTERVAL_MS = 300_000
-
 /**
- * Pure — parses whatever's in the preferences table, falling back to the default for
- * anything missing, malformed, or out of the sane [MIN, MAX] range (e.g. hand-edited or
- * corrupted data). Kept separate from the impure load/save so it's unit-testable without a
- * real database, mirroring windowState.ts's parseWindowState().
+ * Pure — parses whatever's in the preferences table: missing or malformed values fall back
+ * to the default, out-of-range values are clamped to the nearest bound (matching how a set
+ * request is clamped, so the same value never yields two different results depending on
+ * whether it was loaded or saved). Kept separate from the impure load/save so it's
+ * unit-testable without a real database, mirroring windowState.ts's parseWindowState().
  */
 export function parsePollIntervalMs(raw: string | undefined): number {
   if (!raw) return DEFAULT_POLL_INTERVAL_MS
-
   const parsed = Number(raw)
-  if (!Number.isFinite(parsed) || parsed < MIN_POLL_INTERVAL_MS || parsed > MAX_POLL_INTERVAL_MS) {
-    return DEFAULT_POLL_INTERVAL_MS
-  }
-  return parsed
+  return clampPollIntervalMs(parsed)
 }
 
 export function clampPollIntervalMs(value: number): number {

@@ -1,18 +1,6 @@
-import { useEffect, useState } from 'react'
-import { Loader2, MoreHorizontal, Plus } from 'lucide-react'
+import { ConfirmDialog, permanentRemovalDescription } from '@renderer/components/ConfirmDialog'
+import { EmptyState } from '@renderer/components/EmptyState'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@renderer/components/ui/alert-dialog'
-import { buttonVariants } from '@renderer/components/ui/button'
-import { cn } from '@renderer/lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +18,7 @@ import {
   SidebarMenuItem
 } from '@renderer/components/ui/sidebar'
 import { EntityTree } from '@renderer/features/entities/EntityTree'
+import { cn } from '@renderer/lib/utils'
 import {
   deleteProfile,
   disconnectProfile,
@@ -38,6 +27,9 @@ import {
   selectProfile
 } from '@renderer/store/connectionsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
+import { Loader2, MoreHorizontal, Plus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { AddConnectionDialog } from './AddConnectionDialog'
 
 export function ConnectionSidebar(): React.JSX.Element {
@@ -86,12 +78,15 @@ export function ConnectionSidebar(): React.JSX.Element {
   async function handleConfirmDelete(): Promise<void> {
     const id = deletingProfileId
     if (!id) return
+    const name = deletingProfile?.name
     setDeletingProfileId(null)
     setError(null)
 
     const result = await dispatch(deleteProfile(id))
     if (deleteProfile.rejected.match(result)) {
       setError(result.payload ?? 'Failed to delete')
+    } else {
+      toast.success(`Deleted profile "${name}"`)
     }
   }
 
@@ -112,7 +107,7 @@ export function ConnectionSidebar(): React.JSX.Element {
             </Alert>
           )}
           {profiles.length === 0 && (
-            <p className="text-muted-foreground px-2 text-sm">No saved profiles yet.</p>
+            <EmptyState message="No saved profiles yet." className="px-2" />
           )}
           <SidebarMenu>
             {profiles.map((profile) => {
@@ -168,29 +163,13 @@ export function ConnectionSidebar(): React.JSX.Element {
 
       <AddConnectionDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} />
 
-      <AlertDialog
+      <ConfirmDialog
         open={deletingProfileId !== null}
         onOpenChange={(nextOpen) => !nextOpen && setDeletingProfileId(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete connection profile?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove &quot;{deletingProfile?.name}&quot;. This can&apos;t be
-              undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className={buttonVariants({ variant: 'destructive' })}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Delete connection profile?"
+        description={permanentRemovalDescription(deletingProfile?.name ?? '')}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   )
 }

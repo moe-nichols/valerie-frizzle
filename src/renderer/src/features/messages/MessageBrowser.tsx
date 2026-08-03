@@ -1,26 +1,22 @@
-import { useState } from 'react'
-import type { ReceivedMessageDescription, ReceiveMode } from '@shared/domain'
-import type { Result } from '@shared/errors'
-import { Alert, AlertDescription } from '@renderer/components/ui/alert'
+import { EmptyState } from '@renderer/components/EmptyState'
+import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle
-} from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
+import { parseEnum } from '@renderer/lib/parseEnum'
+import { useIsCurrent } from '@renderer/lib/useIsCurrent'
+import type { ReceivedMessageDescription, ReceiveMode } from '@shared/domain'
+import type { IpcError, Result } from '@shared/errors'
+import { useEffect, useState } from 'react'
+import { MessageDetailDialog } from './MessageDetailDialog'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@renderer/components/ui/table'
+  MessageTable,
+  type SettleableMessage,
+  type SortColumn,
+  type SortState
+} from './MessageTable'
 
 /**
  * Where a browser reads messages from. A queue (or a queue DLQ, addressed by its path
@@ -60,7 +56,7 @@ export function MessageBrowser({
 }: MessageBrowserProps): React.JSX.Element {
   const [messages, setMessages] = useState<ReceivedMessageDescription[]>([])
   const [mode, setMode] = useState<ReceiveMode>('peekLock')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<IpcError | null>(null)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<ReceivedMessageDescription | null>(null)
   const [batchSize, setBatchSize] = useState(DEFAULT_BATCH_SIZE)
@@ -68,20 +64,25 @@ export function MessageBrowser({
   // case where paging forward with "Load more" is meaningful.
   const [canLoadMore, setCanLoadMore] = useState(false)
   const [filter, setFilter] = useState('')
-  const [sort, setSort] = useState<{ column: 'seq' | 'enqueued'; dir: 'asc' | 'desc' }>({
-    column: 'seq',
-    dir: 'asc'
-  })
+  const [sort, setSort] = useState<SortState>({ column: 'seq', dir: 'asc' })
   // Defaulted on, per the plan's "regenerate MessageId checkbox defaulted on" — reusing
   // the original id would look like a dupe of whatever's already at the destination if
   // duplicate detection is enabled there.
   const [regenerateMessageId, setRegenerateMessageId] = useState(true)
-
   const key = sourceKey(source)
+  const isCurrent = useIsCurrent(key)
 
-  function peekFrom(
-    fromSequenceNumber?: number
-  ): Promise<Result<ReceivedMessageDescription[]>> {
+  // Loaded messages (and their PeekLock handles) belong to one source on one connection —
+  // carrying them across a selection switch would let the settle buttons act on the wrong
+  // entity's handles under the new entity's header.
+  useEffect(() => {
+    setMessages([])
+    setSelected(null)
+    setError(null)
+    setLoading(false)
+  }, [key])
+
+  function peekFrom(fromSequenceNumber?: number): Promise<Result<ReceivedMessageDescription[]>> {
     return source.kind === 'entity'
       ? window.sbAdmin.messages.peek(profileId, source.entityPath, batchSize, fromSequenceNumber)
       : window.sbAdmin.messages.peekSubscription(
@@ -96,7 +97,13 @@ export function MessageBrowser({
 
   function receiveBatch(): Promise<Result<ReceivedMessageDescription[]>> {
     return source.kind === 'entity'
-      ? window.sbAdmin.messages.receive(profileId, source.entityPath, batchSize, mode, RECEIVE_WAIT_MS)
+      ? window.sbAdmin.messages.receive(
+          profileId,
+          source.entityPath,
+          batchSize,
+          mode,
+          RECEIVE_WAIT_MS
+        )
       : window.sbAdmin.messages.receiveSubscription(
           profileId,
           source.topicName,
@@ -112,12 +119,14 @@ export function MessageBrowser({
     setLoading(true)
     setError(null)
     const response = await peekFrom()
+    // A slow load from a prior selection must not populate the entity now shown.
+    if (!isCurrent()) return
     setLoading(false)
     if (response.ok) {
       setMessages(response.data)
       setCanLoadMore(response.data.length === batchSize)
     } else {
-      setError(response.error.message)
+      setError(response.error)
     }
   }
 
@@ -128,9 +137,10 @@ export function MessageBrowser({
     setLoading(true)
     setError(null)
     const response = await peekFrom(lastSeq + 1)
+    if (!isCurrent()) return
     setLoading(false)
     if (!response.ok) {
-      setError(response.error.message)
+      setError(response.error)
       return
     }
     setMessages((prev) => {
@@ -144,12 +154,13 @@ export function MessageBrowser({
     setLoading(true)
     setError(null)
     const response = await receiveBatch()
+    if (!isCurrent()) return
     setLoading(false)
     if (response.ok) {
       setMessages(response.data)
       setCanLoadMore(false)
     } else {
-      setError(response.error.message)
+      setError(response.error)
     }
   }
 
@@ -158,52 +169,50 @@ export function MessageBrowser({
     setSelected((prev) => (prev?.handleId === handleId ? null : prev))
   }
 
-  async function handleComplete(handleId: string): Promise<void> {
-    const response = await window.sbAdmin.messages.complete(profileId, handleId)
+  /** Runs a settle operation and, on success, drops the row and clears any prior error. */
+  async function settle(
+    handleId: string,
+    operation: () => Promise<Result<unknown>>
+  ): Promise<void> {
+    const response = await operation()
     if (response.ok) {
+      setError(null)
       removeMessage(handleId)
     } else {
-      setError(response.error.message)
+      setError(response.error)
+      // A partial success means the copy already landed at the destination — drop the row
+      // so the tempting "Resubmit" button can't be clicked again and double-deliver it.
+      if (response.error.code === 'PARTIAL_SUCCESS') {
+        removeMessage(handleId)
+      }
     }
+  }
+
+  async function handleComplete(handleId: string): Promise<void> {
+    await settle(handleId, () => window.sbAdmin.messages.complete(profileId, handleId))
   }
 
   async function handleAbandon(handleId: string): Promise<void> {
-    const response = await window.sbAdmin.messages.abandon(profileId, handleId)
-    if (response.ok) {
-      removeMessage(handleId)
-    } else {
-      setError(response.error.message)
-    }
+    await settle(handleId, () => window.sbAdmin.messages.abandon(profileId, handleId))
   }
 
   async function handleDeadLetter(handleId: string): Promise<void> {
-    const response = await window.sbAdmin.messages.deadLetter(
-      profileId,
-      handleId,
-      'manual',
-      'dead-lettered from the UI'
+    await settle(handleId, () =>
+      window.sbAdmin.messages.deadLetter(profileId, handleId, 'manual', 'dead-lettered from the UI')
     )
-    if (response.ok) {
-      removeMessage(handleId)
-    } else {
-      setError(response.error.message)
-    }
   }
 
-  async function handleResubmit(message: ReceivedMessageDescription): Promise<void> {
-    if (!resubmitDestination || !message.handleId) return
-    const response = await window.sbAdmin.messages.resubmit(
-      profileId,
-      message.handleId,
-      message,
-      resubmitDestination,
-      regenerateMessageId
+  async function handleResubmit(message: SettleableMessage): Promise<void> {
+    if (!resubmitDestination) return
+    await settle(message.handleId, () =>
+      window.sbAdmin.messages.resubmit(
+        profileId,
+        message.handleId,
+        message,
+        resubmitDestination,
+        regenerateMessageId
+      )
     )
-    if (response.ok) {
-      removeMessage(message.handleId)
-    } else {
-      setError(response.error.message)
-    }
   }
 
   const normalizedFilter = filter.trim().toLowerCase()
@@ -227,21 +236,22 @@ export function MessageBrowser({
     return sort.dir === 'asc' ? diff : -diff
   })
 
-  function toggleSort(column: 'seq' | 'enqueued'): void {
+  function toggleSort(column: SortColumn): void {
     setSort((prev) =>
       prev.column === column
         ? { column, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
         : { column, dir: 'asc' }
     )
   }
-  const sortIndicator = (column: 'seq' | 'enqueued'): string =>
-    sort.column === column ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
 
   return (
     <div className="space-y-4">
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+        <Alert variant={error.code === 'PARTIAL_SUCCESS' ? 'default' : 'destructive'}>
+          {error.code === 'PARTIAL_SUCCESS' && (
+            <AlertTitle>Resubmitted, but the original could not be removed</AlertTitle>
+          )}
+          <AlertDescription>{error.message}</AlertDescription>
         </Alert>
       )}
 
@@ -252,7 +262,9 @@ export function MessageBrowser({
 
         <RadioGroup
           value={mode}
-          onValueChange={(value) => setMode(value as ReceiveMode)}
+          onValueChange={(value) =>
+            setMode(parseEnum(['peekLock', 'receiveAndDelete'], value, 'peekLock'))
+          }
           className="flex flex-row gap-4"
         >
           <div className="flex items-center gap-2">
@@ -301,8 +313,8 @@ export function MessageBrowser({
           />
           <Label htmlFor={`regenerate-message-id-${key}`}>Regenerate MessageId on resubmit</Label>
           <small className="text-muted-foreground">
-            (at-least-once: if the send succeeds but removing the original fails, don&apos;t
-            retry — you&apos;d duplicate the message)
+            (at-least-once: if the send succeeds but removing the original fails, don&apos;t retry —
+            you&apos;d duplicate the message)
           </small>
         </div>
       )}
@@ -318,81 +330,22 @@ export function MessageBrowser({
 
       {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>
-              <button type="button" className="font-medium" onClick={() => toggleSort('seq')}>
-                Seq{sortIndicator('seq')}
-              </button>
-            </TableHead>
-            <TableHead>Label</TableHead>
-            <TableHead>Correlation ID</TableHead>
-            <TableHead>
-              <button type="button" className="font-medium" onClick={() => toggleSort('enqueued')}>
-                Enqueued{sortIndicator('enqueued')}
-              </button>
-            </TableHead>
-            <TableHead>Body preview</TableHead>
-            {resubmitDestination && <TableHead>Dead-letter reason</TableHead>}
-            <TableHead>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleMessages.map((message) => (
-            <TableRow key={message.handleId ?? message.sequenceNumber}>
-              <TableCell>{message.sequenceNumber}</TableCell>
-              <TableCell>{message.subject}</TableCell>
-              <TableCell>{message.correlationId}</TableCell>
-              <TableCell className="whitespace-nowrap">{message.enqueuedTimeUtc}</TableCell>
-              <TableCell>{message.body.slice(0, 40)}</TableCell>
-              {resubmitDestination && <TableCell>{message.deadLetterReason}</TableCell>}
-              <TableCell>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setSelected(message)}>
-                    View
-                  </Button>
-                  {message.handleId && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleComplete(message.handleId as string)}
-                      >
-                        Complete
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAbandon(message.handleId as string)}
-                      >
-                        Abandon
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeadLetter(message.handleId as string)}
-                      >
-                        Dead-letter
-                      </Button>
-                      {resubmitDestination && (
-                        <Button variant="outline" size="sm" onClick={() => handleResubmit(message)}>
-                          Resubmit
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <MessageTable
+        messages={visibleMessages}
+        resubmitDestination={resubmitDestination}
+        sort={sort}
+        onToggleSort={toggleSort}
+        onView={setSelected}
+        onComplete={handleComplete}
+        onAbandon={handleAbandon}
+        onDeadLetter={handleDeadLetter}
+        onResubmit={handleResubmit}
+      />
       {messages.length === 0 && (
-        <p className="text-muted-foreground text-sm">No messages loaded — peek or receive to load some.</p>
+        <EmptyState message="No messages loaded — peek or receive to load some." />
       )}
       {messages.length > 0 && visibleMessages.length === 0 && (
-        <p className="text-muted-foreground text-sm">No loaded messages match the filter.</p>
+        <EmptyState message="No loaded messages match the filter." />
       )}
       {canLoadMore && (
         <Button variant="outline" size="sm" onClick={handleLoadMore} disabled={loading}>
@@ -400,82 +353,7 @@ export function MessageBrowser({
         </Button>
       )}
 
-      <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Message detail</DialogTitle>
-          </DialogHeader>
-          {selected && (
-            <div className="space-y-4">
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <dt className="text-muted-foreground">Sequence</dt>
-                <dd>{selected.sequenceNumber}</dd>
-                <dt className="text-muted-foreground">Content type</dt>
-                <dd>{selected.contentType}</dd>
-                <dt className="text-muted-foreground">Message ID</dt>
-                <dd className="break-all">{selected.messageId}</dd>
-                <dt className="text-muted-foreground">Correlation ID</dt>
-                <dd className="break-all">{selected.correlationId}</dd>
-                <dt className="text-muted-foreground">Label</dt>
-                <dd className="break-all">{selected.subject}</dd>
-                <dt className="text-muted-foreground">Reply to</dt>
-                <dd className="break-all">{selected.replyTo}</dd>
-                <dt className="text-muted-foreground">Enqueued</dt>
-                <dd>{selected.enqueuedTimeUtc}</dd>
-                <dt className="text-muted-foreground">Delivery count</dt>
-                <dd>{selected.deliveryCount}</dd>
-                {selected.deadLetterReason && (
-                  <>
-                    <dt className="text-muted-foreground">Dead-letter reason</dt>
-                    <dd className="break-all">{selected.deadLetterReason}</dd>
-                  </>
-                )}
-                {selected.deadLetterErrorDescription && (
-                  <>
-                    <dt className="text-muted-foreground">Dead-letter description</dt>
-                    <dd className="break-all">{selected.deadLetterErrorDescription}</dd>
-                  </>
-                )}
-              </dl>
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-sm">Application properties</p>
-                {selected.applicationProperties &&
-                Object.keys(selected.applicationProperties).length > 0 ? (
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md border p-3 text-sm">
-                    {Object.entries(selected.applicationProperties).map(([propKey, value]) => (
-                      <div key={propKey} className="contents">
-                        <dt className="text-muted-foreground break-all">{propKey}</dt>
-                        <dd className="break-all">{String(value)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : (
-                  <p className="text-muted-foreground text-sm">(none)</p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigator.clipboard.writeText(selected.body)}
-                >
-                  Copy body
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigator.clipboard.writeText(JSON.stringify(selected, null, 2))}
-                >
-                  Copy as JSON
-                </Button>
-              </div>
-              <pre className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
-                {selected.body}
-              </pre>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <MessageDetailDialog message={selected} onOpenChange={(open) => !open && setSelected(null)} />
     </div>
   )
 }

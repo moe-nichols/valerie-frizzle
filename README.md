@@ -21,6 +21,8 @@ This is a personal tool: no installer, code signing, or auto-update by design.
   messages are currently sitting in it.
 - **Configurable poll rate** — set from a Settings dialog (gear icon in the sidebar
   footer) and persisted across restarts.
+- **Light/dark theme** — toggled from the same Settings dialog, applied immediately
+  (including the Monaco message editor) and persisted across restarts.
 - **Sending messages** — text/JSON/XML bodies with custom broker properties
   (content type, label, correlation ID, TTL, application properties) via a Monaco-based
   editor.
@@ -75,13 +77,15 @@ for why the two are independent.
 ```sh
 npm run dev
 npm run typecheck  # tsc against the node + web tsconfigs
-npm run lint       # Biome (linter only; formatting is left as-is)
+npm run lint       # Biome (lint + format check)
+npm run format     # Biome formatter, writes in place
 ```
 
 Linting is Biome rather than ESLint: the project runs TypeScript 7, which
 `typescript-eslint` does not yet support, whereas Biome's parser is independent of the
-installed TypeScript version. The formatter is intentionally left off so it doesn't churn
-the existing hand-formatting; see `biome.json` for the (lightly tuned) rule set.
+installed TypeScript version. Biome also formats the codebase (2-space indent, single
+quotes, no semicolons); `npm run lint` fails on unformatted code, `npm run format` fixes
+it. See `biome.json` for the (lightly tuned) rule set.
 
 ## Testing
 

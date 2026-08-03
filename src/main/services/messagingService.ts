@@ -1,21 +1,33 @@
 import { randomUUID } from 'node:crypto'
-import Long from 'long'
 import type {
   ServiceBusClient,
   ServiceBusReceivedMessage,
   ServiceBusReceiver
 } from '@azure/service-bus'
 import type {
+  ApplicationPropertyValue,
   MessageEnvelope,
   ReceivedMessageDescription,
-  ReceiveMode,
-  ApplicationPropertyValue
+  ReceiveMode
 } from '@shared/domain'
+import { AppError } from '@shared/errors'
+import Long from 'long'
 
 interface PeekLockHandle {
   message: ServiceBusReceivedMessage
   receiver: ServiceBusReceiver
 }
+
+/**
+ * How a receiver is addressed. A queue (or a queue DLQ, which really is just a path
+ * suffix) is a single `entityPath`; a subscription uses the SDK's distinct two-arg
+ * `createReceiver(topicName, subscriptionName)` overload (confirmed by reading the SDK's
+ * type declarations), and its DLQ is a `subQueueType` option on that overload, not a
+ * path suffix.
+ */
+type ReceiverTarget =
+  | { entityPath: string }
+  | { topicName: string; subscriptionName: string; deadLetter?: boolean }
 
 function stringifyBody(body: unknown): string {
   if (typeof body === 'string') return body
@@ -108,31 +120,52 @@ export class MessagingService {
     }
   }
 
-  async peekMessages(
-    entityPath: string,
+  /** The one place a receiver is constructed — every peek/count/receive pair differs
+   * only in this addressing (see {@link ReceiverTarget}). */
+  private openReceiver(target: ReceiverTarget, mode?: ReceiveMode): ServiceBusReceiver {
+    if ('entityPath' in target) {
+      return this.client.createReceiver(target.entityPath, mode ? { receiveMode: mode } : undefined)
+    }
+    return this.client.createReceiver(target.topicName, target.subscriptionName, {
+      ...(mode ? { receiveMode: mode } : {}),
+      ...(target.deadLetter ? { subQueueType: 'deadLetter' as const } : {})
+    })
+  }
+
+  /** Opens a transient receiver, peeks up to `maxCount` (optionally from a cursor), maps
+   * the batch through `project`, and always closes the receiver. The four public
+   * peek/count methods differ only in how the receiver is addressed and what they
+   * project out of the batch. */
+  private async withPeekedBatch<T>(
+    target: ReceiverTarget,
     maxCount: number,
-    fromSequenceNumber?: number
-  ): Promise<ReceivedMessageDescription[]> {
-    const receiver = this.client.createReceiver(entityPath)
+    fromSequenceNumber: number | undefined,
+    project: (messages: ServiceBusReceivedMessage[]) => T
+  ): Promise<T> {
+    const receiver = this.openReceiver(target)
     try {
       const messages = await receiver.peekMessages(maxCount, {
         fromSequenceNumber:
           fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
       })
-      return messages.map((message) => toReceivedMessageDescription(message))
+      return project(messages)
     } finally {
       await receiver.close()
     }
   }
 
-  /**
-   * Peeking a subscription isn't just a queue peek with a different path — the SDK
-   * addresses subscriptions via a distinct two-arg `createReceiver(topicName,
-   * subscriptionName)` overload (confirmed by reading the SDK's type declarations),
-   * unlike a queue DLQ, which really is just a suffix on the same single-path call. The
-   * subscription DLQ is reached by the same two-arg receiver plus `subQueueType`, not a
-   * path suffix — so it needs the `deadLetter` flag rather than a `buildDeadLetterQueuePath`.
-   */
+  async peekMessages(
+    entityPath: string,
+    maxCount: number,
+    fromSequenceNumber?: number
+  ): Promise<ReceivedMessageDescription[]> {
+    return this.withPeekedBatch({ entityPath }, maxCount, fromSequenceNumber, (messages) =>
+      messages.map((message) => toReceivedMessageDescription(message))
+    )
+  }
+
+  /** Subscription counterpart of {@link peekMessages} — see {@link ReceiverTarget} for why
+   * a subscription (and its DLQ) is addressed differently from a queue. */
   async peekSubscriptionMessages(
     topicName: string,
     subscriptionName: string,
@@ -140,20 +173,12 @@ export class MessagingService {
     fromSequenceNumber?: number,
     deadLetter = false
   ): Promise<ReceivedMessageDescription[]> {
-    const receiver = this.client.createReceiver(
-      topicName,
-      subscriptionName,
-      deadLetter ? { subQueueType: 'deadLetter' } : undefined
+    return this.withPeekedBatch(
+      { topicName, subscriptionName, deadLetter },
+      maxCount,
+      fromSequenceNumber,
+      (messages) => messages.map((message) => toReceivedMessageDescription(message))
     )
-    try {
-      const messages = await receiver.peekMessages(maxCount, {
-        fromSequenceNumber:
-          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
-      })
-      return messages.map((message) => toReceivedMessageDescription(message))
-    } finally {
-      await receiver.close()
-    }
   }
 
   /**
@@ -168,20 +193,15 @@ export class MessagingService {
     maxCount: number,
     fromSequenceNumber?: number
   ): Promise<number> {
-    const receiver = this.client.createReceiver(entityPath)
-    try {
-      const messages = await receiver.peekMessages(maxCount, {
-        fromSequenceNumber:
-          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
-      })
-      return messages.length
-    } finally {
-      await receiver.close()
-    }
+    return this.withPeekedBatch(
+      { entityPath },
+      maxCount,
+      fromSequenceNumber,
+      (messages) => messages.length
+    )
   }
 
-  /** Subscription counterpart of {@link countMessages}; addresses the subscription via the
-   * two-arg `createReceiver` overload, exactly as {@link peekSubscriptionMessages} does. */
+  /** Subscription counterpart of {@link countMessages}. */
   async countSubscriptionMessages(
     topicName: string,
     subscriptionName: string,
@@ -189,20 +209,12 @@ export class MessagingService {
     fromSequenceNumber?: number,
     deadLetter = false
   ): Promise<number> {
-    const receiver = this.client.createReceiver(
-      topicName,
-      subscriptionName,
-      deadLetter ? { subQueueType: 'deadLetter' } : undefined
+    return this.withPeekedBatch(
+      { topicName, subscriptionName, deadLetter },
+      maxCount,
+      fromSequenceNumber,
+      (messages) => messages.length
     )
-    try {
-      const messages = await receiver.peekMessages(maxCount, {
-        fromSequenceNumber:
-          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
-      })
-      return messages.length
-    } finally {
-      await receiver.close()
-    }
   }
 
   async receiveMessages(
@@ -211,16 +223,18 @@ export class MessagingService {
     mode: ReceiveMode,
     maxWaitTimeMs: number
   ): Promise<ReceivedMessageDescription[]> {
-    const receiver = this.client.createReceiver(entityPath, { receiveMode: mode })
-    return this.drainReceiver(receiver, maxCount, mode, maxWaitTimeMs)
+    return this.drainReceiver(
+      this.openReceiver({ entityPath }, mode),
+      maxCount,
+      mode,
+      maxWaitTimeMs
+    )
   }
 
   /**
-   * Subscription counterpart of {@link receiveMessages}. Addresses the subscription (or its
-   * DLQ) via the two-arg `createReceiver` overload, exactly as {@link peekSubscriptionMessages}
-   * does; the returned PeekLock handles settle through the same handle-based
-   * complete/abandon/deadLetter path, since settling is keyed on the receiver, not on how it
-   * was created.
+   * Subscription counterpart of {@link receiveMessages}; the returned PeekLock handles
+   * settle through the same handle-based complete/abandon/deadLetter path, since settling
+   * is keyed on the receiver, not on how it was created.
    */
   async receiveSubscriptionMessages(
     topicName: string,
@@ -230,11 +244,12 @@ export class MessagingService {
     maxWaitTimeMs: number,
     deadLetter = false
   ): Promise<ReceivedMessageDescription[]> {
-    const receiver = this.client.createReceiver(topicName, subscriptionName, {
-      receiveMode: mode,
-      ...(deadLetter ? { subQueueType: 'deadLetter' as const } : {})
-    })
-    return this.drainReceiver(receiver, maxCount, mode, maxWaitTimeMs)
+    return this.drainReceiver(
+      this.openReceiver({ topicName, subscriptionName, deadLetter }, mode),
+      maxCount,
+      mode,
+      maxWaitTimeMs
+    )
   }
 
   /** Shared receive body for queues and subscriptions — the only thing that differs between
@@ -274,12 +289,29 @@ export class MessagingService {
       return []
     }
 
-    this.receiverRefCounts.set(receiver, messages.length)
-    return messages.map((message) => {
-      const handleId = randomUUID()
+    // Project before registering any handle/ref-count state: if the projection throws,
+    // the receiver is closed and rethrown from here with nothing half-registered —
+    // otherwise it would be stranded open with no handle ever able to release it.
+    let described: Array<{
+      message: ServiceBusReceivedMessage
+      handleId: string
+      result: ReceivedMessageDescription
+    }>
+    try {
+      described = messages.map((message) => {
+        const handleId = randomUUID()
+        return { message, handleId, result: toReceivedMessageDescription(message, handleId) }
+      })
+    } catch (err) {
+      await receiver.close()
+      throw err
+    }
+
+    this.receiverRefCounts.set(receiver, described.length)
+    for (const { message, handleId } of described) {
       this.peekLockHandles.set(handleId, { message, receiver })
-      return toReceivedMessageDescription(message, handleId)
-    })
+    }
+    return described.map(({ result }) => result)
   }
 
   private async settle(
@@ -288,7 +320,8 @@ export class MessagingService {
   ): Promise<void> {
     const handle = this.peekLockHandles.get(handleId)
     if (!handle) {
-      throw new Error(
+      throw new AppError(
+        'NOT_FOUND',
         `no such message handle (it may have already been settled, or its lock expired): ${handleId}`
       )
     }

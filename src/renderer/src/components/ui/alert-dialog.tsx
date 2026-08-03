@@ -1,7 +1,7 @@
 import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog'
-import type * as React from 'react'
 import { buttonVariants } from '@renderer/components/ui/button'
 import { cn } from '@renderer/lib/utils'
+import type * as React from 'react'
 
 function AlertDialog({
   ...props
@@ -56,7 +56,10 @@ function AlertDialogContent({
   )
 }
 
-function AlertDialogHeader({ className, ...props }: React.ComponentProps<'div'>): React.JSX.Element {
+function AlertDialogHeader({
+  className,
+  ...props
+}: React.ComponentProps<'div'>): React.JSX.Element {
   return (
     <div
       data-slot="alert-dialog-header"
@@ -66,7 +69,10 @@ function AlertDialogHeader({ className, ...props }: React.ComponentProps<'div'>)
   )
 }
 
-function AlertDialogFooter({ className, ...props }: React.ComponentProps<'div'>): React.JSX.Element {
+function AlertDialogFooter({
+  className,
+  ...props
+}: React.ComponentProps<'div'>): React.JSX.Element {
   return (
     <div
       data-slot="alert-dialog-footer"
@@ -106,9 +112,7 @@ function AlertDialogAction({
   className,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Action>): React.JSX.Element {
-  return (
-    <AlertDialogPrimitive.Action className={cn(buttonVariants(), className)} {...props} />
-  )
+  return <AlertDialogPrimitive.Action className={cn(buttonVariants(), className)} {...props} />
 }
 
 function AlertDialogCancel({
@@ -125,14 +129,14 @@ function AlertDialogCancel({
 
 export {
   AlertDialog,
-  AlertDialogPortal,
-  AlertDialogOverlay,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
   AlertDialogAction,
-  AlertDialogCancel
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
+  AlertDialogPortal,
+  AlertDialogTitle,
+  AlertDialogTrigger
 }

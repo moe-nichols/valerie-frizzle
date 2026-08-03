@@ -1,4 +1,5 @@
 import type { MessageEnvelope, ReceivedMessageDescription } from '@shared/domain'
+import { AppError } from '@shared/errors'
 import type { MessagingService } from './messagingService'
 
 /**
@@ -54,7 +55,10 @@ export async function resubmitMessage(
     await messagingService.completeMessage(handleId)
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
-    throw new Error(
+    // PARTIAL_SUCCESS lets the renderer distinguish "the copy landed, don't retry" from a
+    // plain failure, where retrying is the natural (and here harmful) reaction.
+    throw new AppError(
+      'PARTIAL_SUCCESS',
       `Message was resubmitted to "${destinationEntityPath}", but the dead-lettered original ` +
         `could not be removed (its lock may have expired): ${detail}. Do NOT resubmit it again — ` +
         `that would create a duplicate. Re-receive the DLQ and complete the leftover copy instead.`
