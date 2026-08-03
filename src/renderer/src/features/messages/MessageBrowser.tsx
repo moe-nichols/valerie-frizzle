@@ -1,22 +1,20 @@
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@renderer/components/ui/table'
 import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import type { ReceivedMessageDescription, ReceiveMode } from '@shared/domain'
 import type { IpcError, Result } from '@shared/errors'
 import { useEffect, useState } from 'react'
+import { MessageDetailDialog } from './MessageDetailDialog'
+import {
+  MessageTable,
+  type SettleableMessage,
+  type SortColumn,
+  type SortState
+} from './MessageTable'
 
 /**
  * Where a browser reads messages from. A queue (or a queue DLQ, addressed by its path
@@ -42,14 +40,6 @@ const MIN_BATCH_SIZE = 1
 const MAX_BATCH_SIZE = 2048
 const RECEIVE_WAIT_MS = 5000
 
-/** A message that arrived via PeekLock and can therefore be settled (completed,
- * abandoned, dead-lettered, resubmitted). Peeked rows have no handle. */
-type SettleableMessage = ReceivedMessageDescription & { handleId: string }
-
-function isSettleable(message: ReceivedMessageDescription): message is SettleableMessage {
-  return typeof message.handleId === 'string'
-}
-
 /** A stable identity string for a source, used to reset the browser when it changes. */
 function sourceKey(source: MessageSource): string {
   return source.kind === 'entity'
@@ -72,10 +62,7 @@ export function MessageBrowser({
   // case where paging forward with "Load more" is meaningful.
   const [canLoadMore, setCanLoadMore] = useState(false)
   const [filter, setFilter] = useState('')
-  const [sort, setSort] = useState<{ column: 'seq' | 'enqueued'; dir: 'asc' | 'desc' }>({
-    column: 'seq',
-    dir: 'asc'
-  })
+  const [sort, setSort] = useState<SortState>({ column: 'seq', dir: 'asc' })
   // Defaulted on, per the plan's "regenerate MessageId checkbox defaulted on" — reusing
   // the original id would look like a dupe of whatever's already at the destination if
   // duplicate detection is enabled there.
@@ -247,15 +234,13 @@ export function MessageBrowser({
     return sort.dir === 'asc' ? diff : -diff
   })
 
-  function toggleSort(column: 'seq' | 'enqueued'): void {
+  function toggleSort(column: SortColumn): void {
     setSort((prev) =>
       prev.column === column
         ? { column, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
         : { column, dir: 'asc' }
     )
   }
-  const sortIndicator = (column: 'seq' | 'enqueued'): string =>
-    sort.column === column ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
 
   return (
     <div className="space-y-4">
@@ -341,76 +326,17 @@ export function MessageBrowser({
 
       {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>
-              <button type="button" className="font-medium" onClick={() => toggleSort('seq')}>
-                Seq{sortIndicator('seq')}
-              </button>
-            </TableHead>
-            <TableHead>Label</TableHead>
-            <TableHead>Correlation ID</TableHead>
-            <TableHead>
-              <button type="button" className="font-medium" onClick={() => toggleSort('enqueued')}>
-                Enqueued{sortIndicator('enqueued')}
-              </button>
-            </TableHead>
-            <TableHead>Body preview</TableHead>
-            {resubmitDestination && <TableHead>Dead-letter reason</TableHead>}
-            <TableHead>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleMessages.map((message) => (
-            <TableRow key={message.handleId ?? message.sequenceNumber}>
-              <TableCell>{message.sequenceNumber}</TableCell>
-              <TableCell>{message.subject}</TableCell>
-              <TableCell>{message.correlationId}</TableCell>
-              <TableCell className="whitespace-nowrap">{message.enqueuedTimeUtc}</TableCell>
-              <TableCell>{message.body.slice(0, 40)}</TableCell>
-              {resubmitDestination && <TableCell>{message.deadLetterReason}</TableCell>}
-              <TableCell>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setSelected(message)}>
-                    View
-                  </Button>
-                  {isSettleable(message) && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleComplete(message.handleId)}
-                      >
-                        Complete
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAbandon(message.handleId)}
-                      >
-                        Abandon
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeadLetter(message.handleId)}
-                      >
-                        Dead-letter
-                      </Button>
-                      {resubmitDestination && (
-                        <Button variant="outline" size="sm" onClick={() => handleResubmit(message)}>
-                          Resubmit
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <MessageTable
+        messages={visibleMessages}
+        resubmitDestination={resubmitDestination}
+        sort={sort}
+        onToggleSort={toggleSort}
+        onView={setSelected}
+        onComplete={handleComplete}
+        onAbandon={handleAbandon}
+        onDeadLetter={handleDeadLetter}
+        onResubmit={handleResubmit}
+      />
       {messages.length === 0 && (
         <p className="text-muted-foreground text-sm">
           No messages loaded — peek or receive to load some.
@@ -425,82 +351,7 @@ export function MessageBrowser({
         </Button>
       )}
 
-      <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Message detail</DialogTitle>
-          </DialogHeader>
-          {selected && (
-            <div className="space-y-4">
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <dt className="text-muted-foreground">Sequence</dt>
-                <dd>{selected.sequenceNumber}</dd>
-                <dt className="text-muted-foreground">Content type</dt>
-                <dd>{selected.contentType}</dd>
-                <dt className="text-muted-foreground">Message ID</dt>
-                <dd className="break-all">{selected.messageId}</dd>
-                <dt className="text-muted-foreground">Correlation ID</dt>
-                <dd className="break-all">{selected.correlationId}</dd>
-                <dt className="text-muted-foreground">Label</dt>
-                <dd className="break-all">{selected.subject}</dd>
-                <dt className="text-muted-foreground">Reply to</dt>
-                <dd className="break-all">{selected.replyTo}</dd>
-                <dt className="text-muted-foreground">Enqueued</dt>
-                <dd>{selected.enqueuedTimeUtc}</dd>
-                <dt className="text-muted-foreground">Delivery count</dt>
-                <dd>{selected.deliveryCount}</dd>
-                {selected.deadLetterReason && (
-                  <>
-                    <dt className="text-muted-foreground">Dead-letter reason</dt>
-                    <dd className="break-all">{selected.deadLetterReason}</dd>
-                  </>
-                )}
-                {selected.deadLetterErrorDescription && (
-                  <>
-                    <dt className="text-muted-foreground">Dead-letter description</dt>
-                    <dd className="break-all">{selected.deadLetterErrorDescription}</dd>
-                  </>
-                )}
-              </dl>
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-sm">Application properties</p>
-                {selected.applicationProperties &&
-                Object.keys(selected.applicationProperties).length > 0 ? (
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md border p-3 text-sm">
-                    {Object.entries(selected.applicationProperties).map(([propKey, value]) => (
-                      <div key={propKey} className="contents">
-                        <dt className="text-muted-foreground break-all">{propKey}</dt>
-                        <dd className="break-all">{String(value)}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : (
-                  <p className="text-muted-foreground text-sm">(none)</p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigator.clipboard.writeText(selected.body)}
-                >
-                  Copy body
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigator.clipboard.writeText(JSON.stringify(selected, null, 2))}
-                >
-                  Copy as JSON
-                </Button>
-              </div>
-              <pre className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
-                {selected.body}
-              </pre>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <MessageDetailDialog message={selected} onOpenChange={(open) => !open && setSelected(null)} />
     </div>
   )
 }
