@@ -138,6 +138,9 @@ export const ipcRequestSchemas: {
   'preferences:pollInterval:get': z.undefined(),
   'preferences:pollInterval:set': z.object({ pollIntervalMs: z.number().int().positive() }),
 
+  'preferences:theme:get': z.undefined(),
+  'preferences:theme:set': z.object({ theme: z.enum(['light', 'dark']) }),
+
   'connections:list': z.undefined(),
   'connections:create': z.object({
     name: nonEmptyString,

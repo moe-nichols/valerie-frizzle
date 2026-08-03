@@ -11,7 +11,14 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
-import { updatePollInterval } from '@renderer/store/settingsSlice'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
+import { updatePollInterval, updateTheme } from '@renderer/store/settingsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 
 interface SettingsDialogProps {
@@ -22,6 +29,7 @@ interface SettingsDialogProps {
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): React.JSX.Element {
   const dispatch = useAppDispatch()
   const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
+  const theme = useAppSelector((state) => state.settings.theme)
   const [pollIntervalSeconds, setPollIntervalSeconds] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -78,6 +86,23 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
               onChange={(event) => setPollIntervalSeconds(event.target.value)}
               required
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Theme</Label>
+            {/* Applied immediately on selection (persisted + reflected on <html>), so it's
+                not gated behind the poll-interval Save button. */}
+            <Select
+              value={theme ?? 'dark'}
+              onValueChange={(value) => dispatch(updateTheme(value as 'light' | 'dark'))}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dark">Dark</SelectItem>
+                <SelectItem value="light">Light</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <DialogFooter>
             <Button type="submit">Save</Button>

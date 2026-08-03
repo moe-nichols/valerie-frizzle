@@ -19,7 +19,10 @@ const api = {
   preferences: {
     getPollInterval: () => invoke('preferences:pollInterval:get', undefined),
     setPollInterval: (pollIntervalMs: number) =>
-      invoke('preferences:pollInterval:set', { pollIntervalMs })
+      invoke('preferences:pollInterval:set', { pollIntervalMs }),
+    getTheme: () => invoke('preferences:theme:get', undefined),
+    setTheme: (theme: IpcChannels['preferences:theme:set']['request']['theme']) =>
+      invoke('preferences:theme:set', { theme })
   },
   connections: {
     list: () => invoke('connections:list', undefined),

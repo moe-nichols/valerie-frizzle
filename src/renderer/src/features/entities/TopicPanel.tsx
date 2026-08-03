@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
@@ -45,6 +47,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     Record<string, MessageCountResult>
   >({})
   const [error, setError] = useState<string | null>(null)
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [newSubscriptionName, setNewSubscriptionName] = useState('')
   const [newSubscriptionFields, setNewSubscriptionFields] = useState(emptySubscriptionFields)
   const [newSubscriptionAdvancedOpen, setNewSubscriptionAdvancedOpen] = useState(false)
@@ -103,13 +106,22 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     return null
   }
 
-  async function refresh(): Promise<void> {
+  async function refresh(viaPoll = false): Promise<void> {
     const [topicError, subscriptionError] = await Promise.all([
       refreshTopic(),
       refreshSubscriptions()
     ])
     if (!isCurrent()) return
-    setError(topicError ?? subscriptionError)
+    const err = topicError ?? subscriptionError
+    if (!err) {
+      setError(null)
+      setLastRefreshed(new Date())
+    } else if (viaPoll) {
+      // Background failures toast rather than pin an inline banner the next poll clears.
+      toast.error(`Failed to refresh ${topicName}: ${err}`)
+    } else {
+      setError(err)
+    }
   }
 
   useEffect(() => {
@@ -118,11 +130,12 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     setSubscriptionCounts({})
     setSubscriptionDlqCounts({})
     setError(null)
+    setLastRefreshed(null)
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId, topicName])
 
-  usePolling(refresh, pollIntervalMs)
+  usePolling(() => refresh(true), pollIntervalMs)
 
   async function handleCreateSubscription(event: FormEvent): Promise<void> {
     event.preventDefault()
@@ -156,7 +169,24 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl">{topicName}</CardTitle>
+        <CardTitle className="flex flex-wrap items-center gap-2 text-xl">
+          {topicName}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            title="Refresh now"
+            onClick={() => refresh()}
+          >
+            <RefreshCw />
+            <span className="sr-only">Refresh now</span>
+          </Button>
+          {lastRefreshed && (
+            <span className="text-muted-foreground text-xs font-normal">
+              Updated {lastRefreshed.toLocaleTimeString()}
+            </span>
+          )}
+        </CardTitle>
         {topic && (
           <p className="text-muted-foreground text-sm">
             {topic.status}, max {topic.maxSizeInMegabytes}MB

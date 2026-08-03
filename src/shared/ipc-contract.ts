@@ -31,6 +31,14 @@ export interface IpcChannels {
     request: { pollIntervalMs: number }
     response: Result<number>
   }
+  'preferences:theme:get': {
+    request: undefined
+    response: Result<'light' | 'dark'>
+  }
+  'preferences:theme:set': {
+    request: { theme: 'light' | 'dark' }
+    response: Result<'light' | 'dark'>
+  }
   'connections:list': {
     request: undefined
     response: Result<ConnectionProfile[]>

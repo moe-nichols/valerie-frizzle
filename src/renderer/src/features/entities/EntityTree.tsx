@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import type { QueueDescription, TopicDescription } from '@shared/domain'
 import { buildDeadLetterQueuePath } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
@@ -72,7 +73,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
   const [editingTopic, setEditingTopic] = useState<TopicDescription | null>(null)
   const [deleting, setDeleting] = useState<DeletingEntity | null>(null)
 
-  async function refresh(): Promise<void> {
+  async function refresh(viaPoll = false): Promise<void> {
     const [queuesResponse, topicsResponse] = await Promise.all([
       window.sbAdmin.entities.queues.list(profileId),
       window.sbAdmin.entities.topics.list(profileId)
@@ -136,7 +137,13 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
     } else {
       nextError = nextError ?? topicsResponse.error.message
     }
-    setError(nextError)
+    // Background poll failures toast instead of pinning the sidebar alert; a manual/initial
+    // refresh still surfaces inline where the user is looking.
+    if (nextError && viaPoll) {
+      toast.error(nextError)
+    } else {
+      setError(nextError)
+    }
   }
 
   useEffect(() => {
@@ -144,7 +151,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId])
 
-  usePolling(refresh, pollIntervalMs)
+  usePolling(() => refresh(true), pollIntervalMs)
 
   async function handleConfirmDelete(): Promise<void> {
     if (!deleting) return
