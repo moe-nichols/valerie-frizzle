@@ -12,6 +12,7 @@ import type {
   UpdateSubscriptionInput,
   RuleDescription,
   CreateRuleInput,
+  UpdateRuleInput,
   MessageEnvelope,
   ReceivedMessageDescription,
   ReceiveMode
@@ -30,6 +31,14 @@ export interface IpcChannels {
     request: { pollIntervalMs: number }
     response: Result<number>
   }
+  'preferences:theme:get': {
+    request: undefined
+    response: Result<'light' | 'dark'>
+  }
+  'preferences:theme:set': {
+    request: { theme: 'light' | 'dark' }
+    response: Result<'light' | 'dark'>
+  }
   'connections:list': {
     request: undefined
     response: Result<ConnectionProfile[]>
@@ -37,6 +46,10 @@ export interface IpcChannels {
   'connections:create': {
     request: { name: string; connectionString: string; managementPort: number }
     response: Result<ConnectionProfile>
+  }
+  'connections:test': {
+    request: { connectionString: string; managementPort: number }
+    response: Result<undefined>
   }
   'connections:update': {
     request: {
@@ -136,6 +149,10 @@ export interface IpcChannels {
     request: { profileId: string; input: CreateRuleInput }
     response: Result<RuleDescription>
   }
+  'entities:rules:update': {
+    request: { profileId: string; input: UpdateRuleInput }
+    response: Result<RuleDescription>
+  }
   'entities:rules:delete': {
     request: { profileId: string; topicName: string; subscriptionName: string; name: string }
     response: Result<undefined>
@@ -160,6 +177,8 @@ export interface IpcChannels {
       subscriptionName: string
       maxCount: number
       fromSequenceNumber?: number
+      /** Peek the subscription's dead-letter sub-queue instead of the subscription itself. */
+      deadLetter?: boolean
     }
     response: Result<ReceivedMessageDescription[]>
   }
@@ -179,6 +198,8 @@ export interface IpcChannels {
       subscriptionName: string
       maxCount: number
       fromSequenceNumber?: number
+      /** Count the subscription's dead-letter sub-queue instead of the subscription itself. */
+      deadLetter?: boolean
     }
     response: Result<number>
   }
@@ -189,6 +210,19 @@ export interface IpcChannels {
       maxCount: number
       mode: ReceiveMode
       maxWaitTimeMs: number
+    }
+    response: Result<ReceivedMessageDescription[]>
+  }
+  'messages:receiveSubscription': {
+    request: {
+      profileId: string
+      topicName: string
+      subscriptionName: string
+      maxCount: number
+      mode: ReceiveMode
+      maxWaitTimeMs: number
+      /** Receive from the subscription's dead-letter sub-queue instead of the subscription. */
+      deadLetter?: boolean
     }
     response: Result<ReceivedMessageDescription[]>
   }

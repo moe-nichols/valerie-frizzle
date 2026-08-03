@@ -71,6 +71,29 @@ export class ConnectionManager {
     }
   }
 
+  /**
+   * Validates a connection string + management port without persisting a profile or joining
+   * `active`: spins up a throwaway proxy + admin client, runs the same cheap liveness check
+   * as {@link doConnect}, and tears everything down. Throws a clear error if the emulator
+   * isn't reachable, so the Add-connection dialog can test before saving.
+   */
+  async testConnection(connectionString: string, managementPort: number): Promise<void> {
+    let adminProxy: AdminHttpsProxy | undefined
+    try {
+      adminProxy = await startAdminHttpsProxy(managementPort)
+      const adminConnectionString = buildAdminConnectionString(connectionString, adminProxy.url)
+      const adminClient = new ServiceBusAdministrationClient(adminConnectionString, {
+        tlsOptions: { ca: adminProxy.caCert }
+      })
+      await adminClient.listQueues()[Symbol.asyncIterator]().next()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new Error(`could not connect to emulator: ${message}`)
+    } finally {
+      await adminProxy?.close().catch(() => {})
+    }
+  }
+
   async disconnect(profileId: string): Promise<void> {
     const connection = this.active.get(profileId)
     if (!connection) return

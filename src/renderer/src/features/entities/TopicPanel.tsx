@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
@@ -15,6 +17,18 @@ import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import { usePolling } from '@renderer/lib/usePolling'
 import { useAppSelector } from '@renderer/store/hooks'
 import { MessageComposer } from '../messages/MessageComposer'
+import { EditSubscriptionDialog } from './EditEntityDialogs'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger
+} from '@renderer/components/ui/collapsible'
+import {
+  emptySubscriptionFields,
+  SubscriptionFields,
+  toCreateSubscriptionInput
+} from './entityForms'
+import { SubscriptionMessages } from './SubscriptionMessages'
 import { SubscriptionRules } from './SubscriptionRules'
 
 interface TopicPanelProps {
@@ -29,8 +43,17 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
   const [subscriptionCounts, setSubscriptionCounts] = useState<Record<string, MessageCountResult>>(
     {}
   )
+  const [subscriptionDlqCounts, setSubscriptionDlqCounts] = useState<
+    Record<string, MessageCountResult>
+  >({})
   const [error, setError] = useState<string | null>(null)
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [newSubscriptionName, setNewSubscriptionName] = useState('')
+  const [newSubscriptionFields, setNewSubscriptionFields] = useState(emptySubscriptionFields)
+  const [newSubscriptionAdvancedOpen, setNewSubscriptionAdvancedOpen] = useState(false)
+  const [editingSubscription, setEditingSubscription] = useState<SubscriptionDescription | null>(
+    null
+  )
   const isCurrent = useIsCurrent(`${profileId}::${topicName}`)
 
   // The two refreshers report their error rather than writing shared `error` state
@@ -51,55 +74,79 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     if (!response.ok) return response.error.message
     setSubscriptions(response.data)
 
-    const counts = await Promise.all(
-      response.data.map((subscription) =>
-        fetchSubscriptionMessageCount(profileId, topicName, subscription.subscriptionName)
+    const [counts, dlqCounts] = await Promise.all([
+      Promise.all(
+        response.data.map((subscription) =>
+          fetchSubscriptionMessageCount(profileId, topicName, subscription.subscriptionName)
+        )
+      ),
+      Promise.all(
+        response.data.map((subscription) =>
+          fetchSubscriptionMessageCount(profileId, topicName, subscription.subscriptionName, true)
+        )
       )
-    )
+    ])
     if (!isCurrent()) return null
-    setSubscriptionCounts((prev) => {
-      const next: Record<string, MessageCountResult> = {}
-      response.data.forEach((subscription, index) => {
-        const count = counts[index]
-        if (count) {
-          next[subscription.subscriptionName] = count
-        } else if (prev[subscription.subscriptionName]) {
-          next[subscription.subscriptionName] = prev[subscription.subscriptionName]
-        }
-      })
-      return next
-    })
+    const mergeCounts =
+      (results: (MessageCountResult | null)[]) =>
+      (prev: Record<string, MessageCountResult>): Record<string, MessageCountResult> => {
+        const next: Record<string, MessageCountResult> = {}
+        response.data.forEach((subscription, index) => {
+          const count = results[index]
+          if (count) {
+            next[subscription.subscriptionName] = count
+          } else if (prev[subscription.subscriptionName]) {
+            next[subscription.subscriptionName] = prev[subscription.subscriptionName]
+          }
+        })
+        return next
+      }
+    setSubscriptionCounts(mergeCounts(counts))
+    setSubscriptionDlqCounts(mergeCounts(dlqCounts))
     return null
   }
 
-  async function refresh(): Promise<void> {
+  async function refresh(viaPoll = false): Promise<void> {
     const [topicError, subscriptionError] = await Promise.all([
       refreshTopic(),
       refreshSubscriptions()
     ])
     if (!isCurrent()) return
-    setError(topicError ?? subscriptionError)
+    const err = topicError ?? subscriptionError
+    if (!err) {
+      setError(null)
+      setLastRefreshed(new Date())
+    } else if (viaPoll) {
+      // Background failures toast rather than pin an inline banner the next poll clears.
+      toast.error(`Failed to refresh ${topicName}: ${err}`)
+    } else {
+      setError(err)
+    }
   }
 
   useEffect(() => {
     setTopic(null)
     setSubscriptions([])
     setSubscriptionCounts({})
+    setSubscriptionDlqCounts({})
     setError(null)
+    setLastRefreshed(null)
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId, topicName])
 
-  usePolling(refresh, pollIntervalMs)
+  usePolling(() => refresh(true), pollIntervalMs)
 
   async function handleCreateSubscription(event: FormEvent): Promise<void> {
     event.preventDefault()
-    const response = await window.sbAdmin.entities.subscriptions.create(profileId, {
-      topicName,
-      subscriptionName: newSubscriptionName
-    })
+    const response = await window.sbAdmin.entities.subscriptions.create(
+      profileId,
+      toCreateSubscriptionInput(topicName, newSubscriptionName, newSubscriptionFields)
+    )
     if (response.ok) {
       setNewSubscriptionName('')
+      setNewSubscriptionFields(emptySubscriptionFields)
+      setNewSubscriptionAdvancedOpen(false)
       setError(await refreshSubscriptions())
     } else {
       setError(response.error.message)
@@ -122,7 +169,24 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl">{topicName}</CardTitle>
+        <CardTitle className="flex flex-wrap items-center gap-2 text-xl">
+          {topicName}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            title="Refresh now"
+            onClick={() => refresh()}
+          >
+            <RefreshCw />
+            <span className="sr-only">Refresh now</span>
+          </Button>
+          {lastRefreshed && (
+            <span className="text-muted-foreground text-xs font-normal">
+              Updated {lastRefreshed.toLocaleTimeString()}
+            </span>
+          )}
+        </CardTitle>
         {topic && (
           <p className="text-muted-foreground text-sm">
             {topic.status}, max {topic.maxSizeInMegabytes}MB
@@ -160,10 +224,23 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                       {formatMessageCount(subscriptionCounts[subscription.subscriptionName])} active
                     </Badge>
                   )}
+                  {subscriptionDlqCounts[subscription.subscriptionName] &&
+                    subscriptionDlqCounts[subscription.subscriptionName].count > 0 && (
+                      <Badge variant="destructive" title="Dead-lettered messages">
+                        {formatMessageCount(subscriptionDlqCounts[subscription.subscriptionName])} DLQ
+                      </Badge>
+                    )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => setEditingSubscription(subscription)}
+                  >
+                    Edit
+                  </Button>
                   <Button
                     variant="destructive"
                     size="sm"
-                    className="ml-auto"
                     onClick={() => handleDeleteSubscription(subscription.subscriptionName)}
                   >
                     Delete
@@ -174,23 +251,58 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                   topicName={topicName}
                   subscriptionName={subscription.subscriptionName}
                 />
+                <SubscriptionMessages
+                  profileId={profileId}
+                  topicName={topicName}
+                  subscriptionName={subscription.subscriptionName}
+                />
               </li>
             ))}
           </ul>
-          <form onSubmit={handleCreateSubscription} className="flex items-end gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-subscription-name">New subscription name</Label>
-              <Input
-                id="new-subscription-name"
-                value={newSubscriptionName}
-                onChange={(event) => setNewSubscriptionName(event.target.value)}
-                required
-              />
+          <form onSubmit={handleCreateSubscription} className="space-y-3">
+            <div className="flex items-end gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-subscription-name">New subscription name</Label>
+                <Input
+                  id="new-subscription-name"
+                  value={newSubscriptionName}
+                  onChange={(event) => setNewSubscriptionName(event.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit">Add subscription</Button>
             </div>
-            <Button type="submit">Add subscription</Button>
+            <Collapsible
+              open={newSubscriptionAdvancedOpen}
+              onOpenChange={setNewSubscriptionAdvancedOpen}
+            >
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="ghost" size="sm">
+                  {newSubscriptionAdvancedOpen ? 'Hide advanced' : 'Advanced…'}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="max-w-md pt-2">
+                <SubscriptionFields
+                  idPrefix="new-subscription"
+                  mode="create"
+                  state={newSubscriptionFields}
+                  onChange={setNewSubscriptionFields}
+                />
+              </CollapsibleContent>
+            </Collapsible>
           </form>
         </div>
       </CardContent>
+
+      {editingSubscription && (
+        <EditSubscriptionDialog
+          profileId={profileId}
+          subscription={editingSubscription}
+          open={editingSubscription !== null}
+          onOpenChange={(nextOpen) => !nextOpen && setEditingSubscription(null)}
+          onUpdated={async () => setError(await refreshSubscriptions())}
+        />
+      )}
     </Card>
   )
 }

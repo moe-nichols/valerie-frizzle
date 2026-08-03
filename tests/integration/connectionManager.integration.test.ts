@@ -64,4 +64,19 @@ describe("ConnectionManager", () => {
   test("connect throws for a profile id that does not exist", async () => {
     await expect(connectionManager.connect("does-not-exist")).rejects.toThrow(/not found/);
   });
+
+  test("testConnection resolves for a reachable emulator without persisting a connection", async () => {
+    await expect(
+      connectionManager.testConnection(TEST_MESSAGING_CONNECTION_STRING, TEST_MANAGEMENT_PORT),
+    ).resolves.toBeUndefined();
+    // It must not join `active` — it's a throwaway probe, not a real connection.
+    expect([...(connectionManager as unknown as { active: Map<string, unknown> }).active.keys()])
+      .toHaveLength(0);
+  });
+
+  test("testConnection throws a clear error for an unreachable management port", async () => {
+    await expect(
+      connectionManager.testConnection(TEST_MESSAGING_CONNECTION_STRING, 9999),
+    ).rejects.toThrow(/could not connect/);
+  });
 });
