@@ -40,11 +40,22 @@ function redactSecrets(text: string): string {
   return text.replace(/SharedAccessKey=[^;\s'"]+/gi, 'SharedAccessKey=<redacted>')
 }
 
+/** Expected failures must not spam the on-disk log at error level: NOT_CONNECTED is
+ * routine whenever a background poll outlives a disconnect, and other domain errors
+ * (validation, not-found, partial success) are user-facing outcomes, not app faults.
+ * Only genuinely unexpected errors keep the error level. */
+function logLevelFor(err: unknown): 'debug' | 'warn' | 'error' {
+  if (err instanceof AppError) return err.code === 'NOT_CONNECTED' ? 'debug' : 'warn'
+  if (err instanceof ZodError) return 'warn'
+  return 'error'
+}
+
 function logRedacted(err: unknown): void {
+  const level = logLevelFor(err)
   if (err instanceof Error) {
-    log.error(`${err.name}: ${redactSecrets(err.message)}`, redactSecrets(err.stack ?? ''))
+    log[level](`${err.name}: ${redactSecrets(err.message)}`, redactSecrets(err.stack ?? ''))
   } else {
-    log.error(redactSecrets(String(err)))
+    log[level](redactSecrets(String(err)))
   }
 }
 

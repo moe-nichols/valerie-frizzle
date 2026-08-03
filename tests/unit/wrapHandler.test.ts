@@ -4,7 +4,9 @@ import { AppError, type Result } from '../../src/shared/errors'
 
 const mocks = vi.hoisted(() => ({
   handle: vi.fn(),
-  logError: vi.fn()
+  logError: vi.fn(),
+  logWarn: vi.fn(),
+  logDebug: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -12,12 +14,18 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('electron-log/main', () => ({
-  default: { error: mocks.logError, warn: vi.fn(), info: vi.fn() }
+  default: { error: mocks.logError, warn: mocks.logWarn, debug: mocks.logDebug, info: vi.fn() }
 }))
 
 import { registerHandler, toResult } from '../../src/main/ipc/wrapHandler'
 
 describe('toResult', () => {
+  beforeEach(() => {
+    mocks.logError.mockClear()
+    mocks.logWarn.mockClear()
+    mocks.logDebug.mockClear()
+  })
+
   test('wraps a successful return value', async () => {
     await expect(toResult(() => 42)).resolves.toEqual({ ok: true, data: 42 })
   })
@@ -48,12 +56,29 @@ describe('toResult', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } })
   })
 
-  test('maps any other thrown error to UNEXPECTED_ERROR and logs it', async () => {
+  test('maps any other thrown error to UNEXPECTED_ERROR and logs it at error level', async () => {
     const result = await toResult(() => {
       throw new Error('boom')
     })
     expect(result).toEqual({ ok: false, error: { code: 'UNEXPECTED_ERROR', message: 'boom' } })
     expect(mocks.logError).toHaveBeenCalled()
+  })
+
+  test('logs NOT_CONNECTED at debug, not error — it is routine during background polling', async () => {
+    await toResult(() => {
+      throw new AppError('NOT_CONNECTED', 'profile is not connected: p1')
+    })
+    expect(mocks.logDebug).toHaveBeenCalled()
+    expect(mocks.logWarn).not.toHaveBeenCalled()
+    expect(mocks.logError).not.toHaveBeenCalled()
+  })
+
+  test('logs other domain errors at warn — expected failures, not app faults', async () => {
+    await toResult(() => {
+      throw new AppError('NOT_FOUND', 'queue gone')
+    })
+    expect(mocks.logWarn).toHaveBeenCalled()
+    expect(mocks.logError).not.toHaveBeenCalled()
   })
 
   test('maps a thrown non-Error to UNEXPECTED_ERROR with its string form', async () => {
