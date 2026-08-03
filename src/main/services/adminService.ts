@@ -4,6 +4,7 @@ import type {
   TopicProperties,
   SubscriptionProperties,
   RuleProperties,
+  SqlRuleAction,
   SqlRuleFilter,
   CorrelationRuleFilter
 } from '@azure/service-bus'
@@ -19,7 +20,9 @@ import type {
   UpdateSubscriptionInput,
   RuleDescription,
   CreateRuleInput,
-  RuleFilterInput
+  UpdateRuleInput,
+  RuleFilterInput,
+  SqlRuleActionInput
 } from '@shared/domain'
 
 function toQueueDescription(props: QueueProperties): QueueDescription {
@@ -79,7 +82,13 @@ function toRuleDescription(
           sessionId: props.filter.sessionId,
           contentType: props.filter.contentType
         }
-  return { topicName, subscriptionName, name: props.name, filter }
+  // The emulator returns an `action` with no `sqlExpression` when a rule has no action;
+  // treat that (and a whitespace-only expression) as "no action" so the UI doesn't render
+  // an empty one.
+  const action: SqlRuleActionInput | undefined = props.action?.sqlExpression?.trim()
+    ? { sqlExpression: props.action.sqlExpression }
+    : undefined
+  return { topicName, subscriptionName, name: props.name, filter, action }
 }
 
 function fromRuleFilterInput(filter: RuleFilterInput): SqlRuleFilter | CorrelationRuleFilter {
@@ -93,6 +102,11 @@ function fromRuleFilterInput(filter: RuleFilterInput): SqlRuleFilter | Correlati
     sessionId: filter.sessionId,
     contentType: filter.contentType
   }
+}
+
+function fromRuleActionInput(action: SqlRuleActionInput | undefined): SqlRuleAction {
+  // An empty SqlRuleAction (no sqlExpression) is how "no action" is represented on the wire.
+  return action ? { sqlExpression: action.sqlExpression } : {}
 }
 
 /**
@@ -258,14 +272,34 @@ export class AdminService {
   }
 
   async createRule(input: CreateRuleInput): Promise<RuleDescription> {
-    const { topicName, subscriptionName, name, filter } = input
-    const created = await this.client.createRule(
-      topicName,
-      subscriptionName,
-      name,
-      fromRuleFilterInput(filter)
-    )
+    const { topicName, subscriptionName, name, filter, action } = input
+    const created = action
+      ? await this.client.createRule(
+          topicName,
+          subscriptionName,
+          name,
+          fromRuleFilterInput(filter),
+          fromRuleActionInput(action)
+        )
+      : await this.client.createRule(topicName, subscriptionName, name, fromRuleFilterInput(filter))
     return toRuleDescription(topicName, subscriptionName, created)
+  }
+
+  async updateRule(input: UpdateRuleInput): Promise<RuleDescription> {
+    const { topicName, subscriptionName, name, filter, action } = input
+    // updateRule replaces the whole rule; the SDK wants the fetched object mutated and
+    // passed back (same fetch-mutate-put shape as the entity updates above).
+    const existing = await this.client.getRule(topicName, subscriptionName, name)
+    const merged = {
+      ...existing,
+      filter: fromRuleFilterInput(filter),
+      action: fromRuleActionInput(action)
+    }
+    const updated = await runUpdateWithEmulatorParseWorkaround(
+      () => this.client.updateRule(topicName, subscriptionName, merged),
+      () => this.client.getRule(topicName, subscriptionName, name)
+    )
+    return toRuleDescription(topicName, subscriptionName, updated)
   }
 
   async deleteRule(topicName: string, subscriptionName: string, name: string): Promise<void> {

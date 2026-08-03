@@ -187,3 +187,50 @@ describe("AdminService — rules", () => {
     expect(rules.map((r) => r.name)).toContain("correlation-rule");
   });
 });
+
+describe("AdminService — rule actions and updates", () => {
+  const topicName = `test-rule-actions-topic-${Date.now()}`;
+  const subscriptionName = "test-rule-actions-sub";
+
+  beforeAll(async () => {
+    await adminService.createTopic({ name: topicName });
+    await adminService.createSubscription({ topicName, subscriptionName });
+  });
+
+  afterAll(async () => {
+    await adminService.deleteTopic(topicName);
+  });
+
+  test("create a rule with a SQL action round-trips the action", async () => {
+    const rule = await adminService.createRule({
+      topicName,
+      subscriptionName,
+      name: "action-rule",
+      filter: { type: "Sql", sqlExpression: "sys.Label = 'urgent'" },
+      action: { sqlExpression: "SET sys.Label = 'HANDLED'" },
+    });
+    expect(rule.action).toEqual({ sqlExpression: "SET sys.Label = 'HANDLED'" });
+
+    const rules = await adminService.listRules(topicName, subscriptionName);
+    expect(rules.find((r) => r.name === "action-rule")?.action).toEqual({
+      sqlExpression: "SET sys.Label = 'HANDLED'",
+    });
+  });
+
+  test("update replaces a rule's filter and action", async () => {
+    const updated = await adminService.updateRule({
+      topicName,
+      subscriptionName,
+      name: "action-rule",
+      filter: { type: "Sql", sqlExpression: "sys.Label = 'calm'" },
+      action: { sqlExpression: "SET sys.Label = 'DONE'" },
+    });
+    expect(updated.filter).toEqual({ type: "Sql", sqlExpression: "sys.Label = 'calm'" });
+    expect(updated.action).toEqual({ sqlExpression: "SET sys.Label = 'DONE'" });
+
+    const rules = await adminService.listRules(topicName, subscriptionName);
+    const found = rules.find((r) => r.name === "action-rule");
+    expect(found?.filter).toEqual({ type: "Sql", sqlExpression: "sys.Label = 'calm'" });
+    expect(found?.action).toEqual({ sqlExpression: "SET sys.Label = 'DONE'" });
+  });
+});

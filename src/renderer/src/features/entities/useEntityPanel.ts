@@ -12,9 +12,9 @@ import { useAppSelector } from '@renderer/store/hooks'
  */
 export function useEntityPanel(
   selectionKey: string,
-  fetch: () => void | Promise<void>,
+  fetch: (viaPoll: boolean) => void | Promise<void>,
   reset: () => void
-): { isCurrent: () => boolean; refresh: () => Promise<void> } {
+): { isCurrent: () => boolean; refresh: (viaPoll?: boolean) => Promise<void> } {
   const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
   const isCurrent = useIsCurrent(selectionKey)
   const refresh = usePolling(fetch, pollIntervalMs)

@@ -46,6 +46,9 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
   const [messageId, setMessageId] = useState('')
   const [replyTo, setReplyTo] = useState('')
   const [timeToLiveSeconds, setTimeToLiveSeconds] = useState('')
+  const [sessionId, setSessionId] = useState('')
+  // datetime-local value (local wall-clock); converted to epoch ms on send.
+  const [scheduledEnqueueLocal, setScheduledEnqueueLocal] = useState('')
   const [properties, setProperties] = useState<PropertyRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -83,6 +86,10 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
       messageId: messageId || undefined,
       replyTo: replyTo || undefined,
       timeToLive: timeToLiveSeconds ? Number(timeToLiveSeconds) * 1000 : undefined,
+      sessionId: sessionId || undefined,
+      scheduledEnqueueTime: scheduledEnqueueLocal
+        ? new Date(scheduledEnqueueLocal).getTime()
+        : undefined,
       applicationProperties: Object.keys(applicationProperties).length > 0 ? applicationProperties : undefined
     }
 
@@ -170,6 +177,24 @@ export function MessageComposer({ profileId, entityPath }: MessageComposerProps)
             type="number"
             value={timeToLiveSeconds}
             onChange={(event) => setTimeToLiveSeconds(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="message-session-id">Session ID</Label>
+          <Input
+            id="message-session-id"
+            value={sessionId}
+            onChange={(event) => setSessionId(event.target.value)}
+            placeholder="(required for session entities)"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="message-scheduled">Scheduled enqueue time</Label>
+          <Input
+            id="message-scheduled"
+            type="datetime-local"
+            value={scheduledEnqueueLocal}
+            onChange={(event) => setScheduledEnqueueLocal(event.target.value)}
           />
         </div>
       </div>

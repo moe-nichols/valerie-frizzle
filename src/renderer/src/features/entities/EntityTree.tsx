@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import type { QueueDescription, TopicDescription } from '@shared/domain'
+import { buildDeadLetterQueuePath } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import {
   AlertDialog,
@@ -26,7 +28,11 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem
 } from '@renderer/components/ui/sidebar'
-import { fetchQueueMessageCount, formatMessageCount } from '@renderer/lib/messageCount'
+import {
+  fetchQueueDeadLetterCount,
+  fetchQueueMessageCount,
+  formatMessageCount
+} from '@renderer/lib/messageCount'
 import { useEntityCounts } from '@renderer/lib/useEntityCounts'
 import { usePolling } from '@renderer/lib/usePolling'
 import {
@@ -37,7 +43,9 @@ import {
   topicSelected
 } from '@renderer/store/connectionsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
-import { CreateEntityDialog } from './CreateEntityDialog'
+import { CreateQueueDialog } from './CreateQueueDialog'
+import { CreateTopicDialog } from './CreateTopicDialog'
+import { EditQueueDialog, EditTopicDialog } from './EditEntityDialogs'
 
 interface EntityTreeProps {
   profileId: string
@@ -57,14 +65,17 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
   const [queues, setQueues] = useState<QueueDescription[]>([])
   const [topics, setTopics] = useState<TopicDescription[]>([])
   const { counts: queueCounts, updateCounts: updateQueueCounts } = useEntityCounts()
+  const { counts: queueDlqCounts, updateCounts: updateQueueDlqCounts } = useEntityCounts()
   const [error, setError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
 
   const [createQueueOpen, setCreateQueueOpen] = useState(false)
   const [createTopicOpen, setCreateTopicOpen] = useState(false)
+  const [editingQueue, setEditingQueue] = useState<QueueDescription | null>(null)
+  const [editingTopic, setEditingTopic] = useState<TopicDescription | null>(null)
   const [deleting, setDeleting] = useState<DeletingEntity | null>(null)
 
-  async function fetchEntities(): Promise<void> {
+  async function fetchEntities(viaPoll: boolean): Promise<void> {
     const [queuesResponse, topicsResponse] = await Promise.all([
       window.sbAdmin.entities.queues.list(profileId),
       window.sbAdmin.entities.topics.list(profileId)
@@ -87,10 +98,13 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
     let nextError: string | null = null
     if (queuesResponse.ok) {
       setQueues(queuesResponse.data)
-      await updateQueueCounts(
-        queuesResponse.data.map((queue) => queue.name),
-        (name) => fetchQueueMessageCount(profileId, name)
-      )
+      const queueNames = queuesResponse.data.map((queue) => queue.name)
+      await Promise.all([
+        updateQueueCounts(queueNames, (name) => fetchQueueMessageCount(profileId, name)),
+        updateQueueDlqCounts(queueNames, (name) =>
+          fetchQueueDeadLetterCount(profileId, buildDeadLetterQueuePath(name))
+        )
+      ])
     } else {
       nextError = queuesResponse.error.message
     }
@@ -99,7 +113,13 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
     } else {
       nextError = nextError ?? topicsResponse.error.message
     }
-    setError(nextError)
+    // Background poll failures toast instead of pinning the sidebar alert; a manual/initial
+    // refresh still surfaces inline where the user is looking.
+    if (nextError && viaPoll) {
+      toast.error(nextError)
+    } else {
+      setError(nextError)
+    }
     setLoaded(true)
   }
 
@@ -185,6 +205,15 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
                 {formatMessageCount(queueCounts[queue.name])}
               </Badge>
             )}
+            {queueDlqCounts[queue.name] && queueDlqCounts[queue.name].count > 0 && (
+              <Badge
+                variant="destructive"
+                className="shrink-0"
+                title="Dead-lettered messages"
+              >
+                {formatMessageCount(queueDlqCounts[queue.name])} DLQ
+              </Badge>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-5 shrink-0">
@@ -193,6 +222,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="right" align="start">
+                <DropdownMenuItem onClick={() => setEditingQueue(queue)}>Edit</DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={() => setDeleting({ kind: 'queue', name: queue.name })}
@@ -255,6 +285,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="right" align="start">
+                <DropdownMenuItem onClick={() => setEditingTopic(topic)}>Edit</DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={() => setDeleting({ kind: 'topic', name: topic.name })}
@@ -267,20 +298,37 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         ))}
       </SidebarMenuSub>
 
-      <CreateEntityDialog
+      <CreateQueueDialog
         profileId={profileId}
-        entityKind="queue"
         open={createQueueOpen}
         onOpenChange={setCreateQueueOpen}
         onCreated={refresh}
       />
-      <CreateEntityDialog
+      <CreateTopicDialog
         profileId={profileId}
-        entityKind="topic"
         open={createTopicOpen}
         onOpenChange={setCreateTopicOpen}
         onCreated={refresh}
       />
+
+      {editingQueue && (
+        <EditQueueDialog
+          profileId={profileId}
+          queue={editingQueue}
+          open={editingQueue !== null}
+          onOpenChange={(nextOpen) => !nextOpen && setEditingQueue(null)}
+          onUpdated={refresh}
+        />
+      )}
+      {editingTopic && (
+        <EditTopicDialog
+          profileId={profileId}
+          topic={editingTopic}
+          open={editingTopic !== null}
+          onOpenChange={(nextOpen) => !nextOpen && setEditingTopic(null)}
+          onUpdated={refresh}
+        />
+      )}
 
       <AlertDialog
         open={deleting !== null}

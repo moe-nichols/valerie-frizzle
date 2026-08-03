@@ -15,7 +15,7 @@ import { ConnectionSidebar } from './features/connections/ConnectionSidebar'
 import { QueuePanel } from './features/entities/QueuePanel'
 import { TopicPanel } from './features/entities/TopicPanel'
 import { SettingsButton } from './features/settings/SettingsButton'
-import { fetchPollInterval } from './store/settingsSlice'
+import { fetchPollInterval, fetchTheme } from './store/settingsSlice'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 
 function App(): React.JSX.Element {
@@ -23,6 +23,7 @@ function App(): React.JSX.Element {
   const selectedProfileId = useAppSelector((state) => state.connections.selectedProfileId)
   const activeQueueName = useAppSelector((state) => state.connections.activeQueueName)
   const activeTopicName = useAppSelector((state) => state.connections.activeTopicName)
+  const theme = useAppSelector((state) => state.settings.theme)
 
   useEffect(() => {
     dispatch(fetchPollInterval())
@@ -31,7 +32,15 @@ function App(): React.JSX.Element {
         // The slice already fell back to the default interval; this just tells the user.
         toast.error(`Could not load the refresh-interval setting: ${message}. Using the default.`)
       })
+    dispatch(fetchTheme())
   }, [dispatch])
+
+  // Reflect the persisted theme onto <html>. index.html ships class="dark", so this only
+  // needs to flip to light when that's the stored choice (and back if toggled at runtime).
+  useEffect(() => {
+    if (theme === null) return
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
 
   return (
     <SidebarProvider>

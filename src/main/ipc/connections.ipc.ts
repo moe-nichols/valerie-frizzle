@@ -10,6 +10,11 @@ export function registerConnectionsIpcHandlers(
 
   registerHandler('connections:create', (request) => profilesRepo.create(request))
 
+  registerHandler('connections:test', async (request) => {
+    await connectionManager.testConnection(request.connectionString, request.managementPort)
+    return undefined
+  })
+
   registerHandler('connections:update', async (request) => {
     const { id, ...input } = request
     // An active connection was built from the old connection string/port; left in place it

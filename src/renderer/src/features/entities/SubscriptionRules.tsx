@@ -56,6 +56,9 @@ export function SubscriptionRules({
   const [subject, setSubject] = useState('')
   const [sessionId, setSessionId] = useState('')
   const [contentType, setContentType] = useState('')
+  const [actionSql, setActionSql] = useState('')
+  // Non-null while editing an existing rule (its name is then immutable); null = create mode.
+  const [editingName, setEditingName] = useState<string | null>(null)
 
   async function refresh(): Promise<void> {
     const response = await window.sbAdmin.entities.rules.list(profileId, topicName, subscriptionName)
@@ -79,7 +82,37 @@ export function SubscriptionRules({
     }
   }
 
-  async function handleCreate(event: FormEvent): Promise<void> {
+  function resetForm(): void {
+    setEditingName(null)
+    setRuleName('')
+    setFilterType('Sql')
+    setSqlExpression('')
+    setCorrelationId('')
+    setMessageId('')
+    setSubject('')
+    setSessionId('')
+    setContentType('')
+    setActionSql('')
+  }
+
+  function startEdit(rule: RuleDescription): void {
+    setEditingName(rule.name)
+    setRuleName(rule.name)
+    setActionSql(rule.action?.sqlExpression ?? '')
+    if (rule.filter.type === 'Sql') {
+      setFilterType('Sql')
+      setSqlExpression(rule.filter.sqlExpression)
+    } else {
+      setFilterType('Correlation')
+      setCorrelationId(rule.filter.correlationId ?? '')
+      setMessageId(rule.filter.messageId ?? '')
+      setSubject(rule.filter.subject ?? '')
+      setSessionId(rule.filter.sessionId ?? '')
+      setContentType(rule.filter.contentType ?? '')
+    }
+  }
+
+  async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault()
     const filter: RuleFilterInput =
       filterType === 'Sql'
@@ -92,20 +125,18 @@ export function SubscriptionRules({
             sessionId: sessionId || undefined,
             contentType: contentType || undefined
           }
-    const response = await window.sbAdmin.entities.rules.create(profileId, {
+    const input = {
       topicName,
       subscriptionName,
       name: ruleName,
-      filter
-    })
+      filter,
+      action: actionSql.trim() ? { sqlExpression: actionSql.trim() } : undefined
+    }
+    const response = editingName
+      ? await window.sbAdmin.entities.rules.update(profileId, input)
+      : await window.sbAdmin.entities.rules.create(profileId, input)
     if (response.ok) {
-      setRuleName('')
-      setSqlExpression('')
-      setCorrelationId('')
-      setMessageId('')
-      setSubject('')
-      setSessionId('')
-      setContentType('')
+      resetForm()
       await refresh()
     } else {
       setError(response.error.message)
@@ -135,7 +166,11 @@ export function SubscriptionRules({
             <li key={rule.name} className="flex items-center gap-2 text-sm">
               <span>
                 {rule.name} — {describeFilter(rule.filter)}
+                {rule.action && ` → action: ${rule.action.sqlExpression}`}
               </span>
+              <Button variant="outline" size="sm" className="ml-auto" onClick={() => startEdit(rule)}>
+                Edit
+              </Button>
               <Button variant="destructive" size="sm" onClick={() => handleDelete(rule.name)}>
                 Delete
               </Button>
@@ -143,13 +178,17 @@ export function SubscriptionRules({
           ))}
           {rules.length === 0 && <li className="text-muted-foreground text-sm">No rules yet.</li>}
         </ul>
-        <form onSubmit={handleCreate} className="max-w-md space-y-3">
+        <form onSubmit={handleSubmit} className="max-w-md space-y-3">
+          {editingName && (
+            <p className="text-muted-foreground text-sm">Editing rule “{editingName}”.</p>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor={`rule-name-${topicName}-${subscriptionName}`}>Rule name</Label>
             <Input
               id={`rule-name-${topicName}-${subscriptionName}`}
               value={ruleName}
               onChange={(event) => setRuleName(event.target.value)}
+              disabled={editingName !== null}
               required
             />
           </div>
@@ -223,7 +262,25 @@ export function SubscriptionRules({
               </div>
             </div>
           )}
-          <Button type="submit">Add rule</Button>
+          <div className="space-y-1.5">
+            <Label htmlFor={`rule-action-${topicName}-${subscriptionName}`}>
+              SQL action (optional)
+            </Label>
+            <Input
+              id={`rule-action-${topicName}-${subscriptionName}`}
+              value={actionSql}
+              onChange={(event) => setActionSql(event.target.value)}
+              placeholder="SET sys.Label = 'HANDLED'"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit">{editingName ? 'Save rule' : 'Add rule'}</Button>
+            {editingName && (
+              <Button type="button" variant="ghost" onClick={resetForm}>
+                Cancel
+              </Button>
+            )}
+          </div>
         </form>
       </CollapsibleContent>
     </Collapsible>

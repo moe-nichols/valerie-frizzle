@@ -1,0 +1,26 @@
+import type { PreferencesRepo } from './db/preferencesRepo'
+
+const PREFERENCE_KEY = 'theme'
+
+export type Theme = 'light' | 'dark'
+
+// The app shipped dark-only (index.html sets class="dark"), so dark stays the default for
+// anything missing or malformed — matching the pre-toggle behavior.
+export const DEFAULT_THEME: Theme = 'dark'
+
+/** Pure — normalizes whatever's stored to a known theme, falling back to the default.
+ * Kept separate from load/save so it's unit-testable without a database, mirroring
+ * pollPreference.ts's parsePollIntervalMs(). */
+export function parseTheme(raw: string | undefined): Theme {
+  return raw === 'light' || raw === 'dark' ? raw : DEFAULT_THEME
+}
+
+export function loadTheme(preferencesRepo: PreferencesRepo): Theme {
+  return parseTheme(preferencesRepo.get(PREFERENCE_KEY))
+}
+
+export function saveTheme(preferencesRepo: PreferencesRepo, theme: Theme): Theme {
+  const normalized = parseTheme(theme)
+  preferencesRepo.set(PREFERENCE_KEY, normalized)
+  return normalized
+}

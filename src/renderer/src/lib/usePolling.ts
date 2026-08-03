@@ -13,26 +13,38 @@ import { useCallback, useEffect, useRef } from 'react'
  * the returned function mid-run coalesces into one follow-up run instead of overlapping,
  * so a caller who just created or deleted something still gets a fetch that started after
  * their change. Timer ticks that land mid-run are simply skipped.
+ *
+ * `callback` receives `viaPoll`, so it can route background (timer-driven) failures to a
+ * toast instead of an inline banner. Timer ticks always pass `true`; the returned function
+ * defaults to `false` for manual callers (button clicks, initial-load effects). If calls
+ * coalesce mid-run, a manual call in the mix always wins — a user waiting on a manual
+ * refresh should see its result inline, not have it silently downgraded to a toast because a
+ * poll tick landed at the same time.
  */
 export function usePolling(
-  callback: () => void | Promise<void>,
+  callback: (viaPoll: boolean) => void | Promise<void>,
   intervalMs: number | null
-): () => Promise<void> {
+): (viaPoll?: boolean) => Promise<void> {
   const callbackRef = useRef(callback)
   callbackRef.current = callback
   const runningRef = useRef(false)
   const rerunRef = useRef(false)
+  const rerunViaPollRef = useRef(true)
 
-  const refresh = useCallback(async (): Promise<void> => {
+  const refresh = useCallback(async (viaPoll = false): Promise<void> => {
     if (runningRef.current) {
       rerunRef.current = true
+      rerunViaPollRef.current = rerunViaPollRef.current && viaPoll
       return
     }
     runningRef.current = true
     try {
+      let currentViaPoll = viaPoll
       do {
         rerunRef.current = false
-        await callbackRef.current()
+        rerunViaPollRef.current = true
+        await callbackRef.current(currentViaPoll)
+        currentViaPoll = rerunViaPollRef.current
       } while (rerunRef.current)
     } finally {
       runningRef.current = false
@@ -43,7 +55,7 @@ export function usePolling(
     if (intervalMs === null) return
     const id = setInterval(() => {
       // Skip (don't coalesce) ticks that land mid-run — the next tick will catch up.
-      if (!runningRef.current) void refresh()
+      if (!runningRef.current) void refresh(true)
     }, intervalMs)
     return () => clearInterval(id)
   }, [intervalMs, refresh])

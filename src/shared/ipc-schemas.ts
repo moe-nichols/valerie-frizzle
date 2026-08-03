@@ -36,6 +36,8 @@ const messageEnvelope = z.object({
   messageId: z.string().optional(),
   replyTo: z.string().optional(),
   timeToLive: z.number().nonnegative().optional(),
+  sessionId: z.string().optional(),
+  scheduledEnqueueTime: z.number().int().nonnegative().optional(),
   applicationProperties: applicationProperties.optional()
 })
 
@@ -119,11 +121,14 @@ const ruleFilter = z.discriminatedUnion('type', [
   })
 ])
 
+const ruleAction = z.object({ sqlExpression: nonEmptyString })
+
 const createRuleInput = z.object({
   topicName: nonEmptyString,
   subscriptionName: nonEmptyString,
   name: nonEmptyString,
-  filter: ruleFilter
+  filter: ruleFilter,
+  action: ruleAction.optional()
 })
 
 export const ipcRequestSchemas: {
@@ -138,9 +143,16 @@ export const ipcRequestSchemas: {
     pollIntervalMs: z.number().int().min(MIN_POLL_INTERVAL_MS).max(MAX_POLL_INTERVAL_MS)
   }),
 
+  'preferences:theme:get': z.undefined(),
+  'preferences:theme:set': z.object({ theme: z.enum(['light', 'dark']) }),
+
   'connections:list': z.undefined(),
   'connections:create': z.object({
     name: nonEmptyString,
+    connectionString: nonEmptyString,
+    managementPort: port
+  }),
+  'connections:test': z.object({
     connectionString: nonEmptyString,
     managementPort: port
   }),
@@ -206,6 +218,7 @@ export const ipcRequestSchemas: {
     subscriptionName: nonEmptyString
   }),
   'entities:rules:create': z.object({ profileId: nonEmptyString, input: createRuleInput }),
+  'entities:rules:update': z.object({ profileId: nonEmptyString, input: createRuleInput }),
   'entities:rules:delete': z.object({
     profileId: nonEmptyString,
     topicName: nonEmptyString,
@@ -229,7 +242,8 @@ export const ipcRequestSchemas: {
     topicName: nonEmptyString,
     subscriptionName: nonEmptyString,
     maxCount: batchCount,
-    fromSequenceNumber: sequenceNumber.optional()
+    fromSequenceNumber: sequenceNumber.optional(),
+    deadLetter: z.boolean().optional()
   }),
   'messages:count': z.object({
     profileId: nonEmptyString,
@@ -242,7 +256,8 @@ export const ipcRequestSchemas: {
     topicName: nonEmptyString,
     subscriptionName: nonEmptyString,
     maxCount: batchCount,
-    fromSequenceNumber: sequenceNumber.optional()
+    fromSequenceNumber: sequenceNumber.optional(),
+    deadLetter: z.boolean().optional()
   }),
   'messages:receive': z.object({
     profileId: nonEmptyString,
@@ -250,6 +265,15 @@ export const ipcRequestSchemas: {
     maxCount: batchCount,
     mode: receiveMode,
     maxWaitTimeMs: waitTimeMs
+  }),
+  'messages:receiveSubscription': z.object({
+    profileId: nonEmptyString,
+    topicName: nonEmptyString,
+    subscriptionName: nonEmptyString,
+    maxCount: batchCount,
+    mode: receiveMode,
+    maxWaitTimeMs: waitTimeMs,
+    deadLetter: z.boolean().optional()
   }),
   'messages:complete': z.object({ profileId: nonEmptyString, handleId: nonEmptyString }),
   'messages:abandon': z.object({ profileId: nonEmptyString, handleId: nonEmptyString }),

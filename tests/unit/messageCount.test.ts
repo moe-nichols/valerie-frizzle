@@ -55,7 +55,8 @@ describe('fetchSubscriptionMessageCount', () => {
       't1',
       's1',
       PEEK_COUNT_CAP,
-      PEEK_FROM_START
+      PEEK_FROM_START,
+      false
     )
     expect(result).toEqual({ count: 7, approximate: false })
   })

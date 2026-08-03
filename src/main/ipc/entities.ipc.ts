@@ -85,6 +85,10 @@ export function registerEntitiesIpcHandlers(connectionManager: ConnectionManager
     adminServiceFor(request.profileId).createRule(request.input)
   )
 
+  registerHandler('entities:rules:update', (request) =>
+    adminServiceFor(request.profileId).updateRule(request.input)
+  )
+
   registerHandler('entities:rules:delete', async (request) => {
     await adminServiceFor(request.profileId).deleteRule(
       request.topicName,
