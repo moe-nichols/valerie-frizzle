@@ -14,7 +14,8 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
-import { type FormEvent, useState } from 'react'
+import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
+import { useState } from 'react'
 import { emptyTopicFields, TopicFields, toCreateTopicInput } from './entityForms'
 
 interface CreateTopicDialogProps {
@@ -33,28 +34,21 @@ export function CreateTopicDialog({
   const [name, setName] = useState('')
   const [fields, setFields] = useState(emptyTopicFields)
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+
+  const { submit, submitting, error, reset } = useAsyncSubmit(
+    () => window.sbAdmin.entities.topics.create(profileId, toCreateTopicInput(name, fields)),
+    async () => {
+      resetForm()
+      onOpenChange(false)
+      await onCreated()
+    }
+  )
 
   function resetForm(): void {
     setName('')
     setFields(emptyTopicFields)
     setAdvancedOpen(false)
-    setError(null)
-  }
-
-  async function handleSubmit(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    const response = await window.sbAdmin.entities.topics.create(
-      profileId,
-      toCreateTopicInput(name, fields)
-    )
-    if (response.ok) {
-      resetForm()
-      onOpenChange(false)
-      await onCreated()
-    } else {
-      setError(response.error.message)
-    }
+    reset()
   }
 
   return (
@@ -76,7 +70,7 @@ export function CreateTopicDialog({
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="new-topic-name">Name</Label>
             <Input
@@ -99,7 +93,9 @@ export function CreateTopicDialog({
           </Collapsible>
 
           <DialogFooter>
-            <Button type="submit">Add topic</Button>
+            <Button type="submit" disabled={submitting}>
+              Add topic
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
   Collapsible,
@@ -13,10 +14,11 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
+import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
 import { usePolling } from '@renderer/lib/usePolling'
 import { useAppSelector } from '@renderer/store/hooks'
 import type { RuleDescription, RuleFilterInput } from '@shared/domain'
-import { type FormEvent, useState } from 'react'
+import { useState } from 'react'
 
 interface SubscriptionRulesProps {
   profileId: string
@@ -116,36 +118,35 @@ export function SubscriptionRules({
     }
   }
 
-  async function handleSubmit(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    const filter: RuleFilterInput =
-      filterType === 'Sql'
-        ? { type: 'Sql', sqlExpression }
-        : {
-            type: 'Correlation',
-            correlationId: correlationId || undefined,
-            messageId: messageId || undefined,
-            subject: subject || undefined,
-            sessionId: sessionId || undefined,
-            contentType: contentType || undefined
-          }
-    const input = {
-      topicName,
-      subscriptionName,
-      name: ruleName,
-      filter,
-      action: actionSql.trim() ? { sqlExpression: actionSql.trim() } : undefined
-    }
-    const response = editingName
-      ? await window.sbAdmin.entities.rules.update(profileId, input)
-      : await window.sbAdmin.entities.rules.create(profileId, input)
-    if (response.ok) {
+  const ruleForm = useAsyncSubmit(
+    () => {
+      const filter: RuleFilterInput =
+        filterType === 'Sql'
+          ? { type: 'Sql', sqlExpression }
+          : {
+              type: 'Correlation',
+              correlationId: correlationId || undefined,
+              messageId: messageId || undefined,
+              subject: subject || undefined,
+              sessionId: sessionId || undefined,
+              contentType: contentType || undefined
+            }
+      const input = {
+        topicName,
+        subscriptionName,
+        name: ruleName,
+        filter,
+        action: actionSql.trim() ? { sqlExpression: actionSql.trim() } : undefined
+      }
+      return editingName
+        ? window.sbAdmin.entities.rules.update(profileId, input)
+        : window.sbAdmin.entities.rules.create(profileId, input)
+    },
+    async () => {
       resetForm()
       await refresh()
-    } else {
-      setError(response.error.message)
     }
-  }
+  )
 
   async function handleDelete(name: string): Promise<void> {
     const response = await window.sbAdmin.entities.rules.delete(
@@ -192,7 +193,12 @@ export function SubscriptionRules({
           ))}
           {rules.length === 0 && <li className="text-muted-foreground text-sm">No rules yet.</li>}
         </ul>
-        <form onSubmit={handleSubmit} className="max-w-md space-y-3">
+        <form onSubmit={ruleForm.submit} className="max-w-md space-y-3">
+          {ruleForm.error && (
+            <Alert variant="destructive">
+              <AlertDescription>{ruleForm.error}</AlertDescription>
+            </Alert>
+          )}
           {editingName && (
             <p className="text-muted-foreground text-sm">Editing rule “{editingName}”.</p>
           )}
@@ -294,7 +300,9 @@ export function SubscriptionRules({
             />
           </div>
           <div className="flex gap-2">
-            <Button type="submit">{editingName ? 'Save rule' : 'Add rule'}</Button>
+            <Button type="submit" disabled={ruleForm.submitting}>
+              {editingName ? 'Save rule' : 'Add rule'}
+            </Button>
             {editingName && (
               <Button type="button" variant="ghost" onClick={resetForm}>
                 Cancel

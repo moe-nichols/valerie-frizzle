@@ -10,9 +10,10 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
+import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
 import { createProfile } from '@renderer/store/connectionsSlice'
 import { useAppDispatch } from '@renderer/store/hooks'
-import { type FormEvent, useState } from 'react'
+import { useState } from 'react'
 
 interface AddConnectionDialogProps {
   open: boolean
@@ -27,17 +28,38 @@ export function AddConnectionDialog({
   const [name, setName] = useState('')
   const [connectionString, setConnectionString] = useState('')
   const [managementPort, setManagementPort] = useState('5300')
-  const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<'ok' | null>(null)
+
+  const { submit, submitting, error, setError, reset } = useAsyncSubmit(
+    async () => {
+      const result = await dispatch(
+        createProfile({ name, connectionString, managementPort: Number(managementPort) })
+      )
+      if (createProfile.rejected.match(result)) {
+        return {
+          ok: false,
+          error: {
+            code: 'UNEXPECTED_ERROR',
+            message: result.payload ?? 'Failed to create profile'
+          }
+        }
+      }
+      return { ok: true, data: undefined }
+    },
+    () => {
+      resetForm()
+      onOpenChange(false)
+    }
+  )
 
   function resetForm(): void {
     setName('')
     setConnectionString('')
     setManagementPort('5300')
-    setError(null)
     setTesting(false)
     setTestResult(null)
+    reset()
   }
 
   async function handleTest(): Promise<void> {
@@ -54,19 +76,6 @@ export function AddConnectionDialog({
     } else {
       setError(response.error.message)
     }
-  }
-
-  async function handleSubmit(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    const result = await dispatch(
-      createProfile({ name, connectionString, managementPort: Number(managementPort) })
-    )
-    if (createProfile.rejected.match(result)) {
-      setError(result.payload ?? 'Failed to create profile')
-      return
-    }
-    resetForm()
-    onOpenChange(false)
   }
 
   return (
@@ -96,7 +105,7 @@ export function AddConnectionDialog({
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="connection-name">Name</Label>
             <Input
@@ -135,7 +144,9 @@ export function AddConnectionDialog({
             >
               {testing ? 'Testing…' : 'Test connection'}
             </Button>
-            <Button type="submit">Add profile</Button>
+            <Button type="submit" disabled={submitting}>
+              Add profile
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

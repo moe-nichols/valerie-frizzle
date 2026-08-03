@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@renderer/components/ui/dialog'
+import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
 import type { QueueDescription, SubscriptionDescription, TopicDescription } from '@shared/domain'
 import { type FormEvent, useEffect, useState } from 'react'
 import {
@@ -33,6 +34,7 @@ interface DialogShellProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   error: string | null
+  submitting: boolean
   onSubmit: (event: FormEvent) => void
   children: React.ReactNode
 }
@@ -42,6 +44,7 @@ function EditDialogShell({
   open,
   onOpenChange,
   error,
+  submitting,
   onSubmit,
   children
 }: DialogShellProps): React.JSX.Element {
@@ -59,7 +62,9 @@ function EditDialogShell({
         <form onSubmit={onSubmit} className="space-y-3">
           {children}
           <DialogFooter>
-            <Button type="submit">Save</Button>
+            <Button type="submit" disabled={submitting}>
+              Save
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -81,29 +86,21 @@ export function EditQueueDialog({
   onUpdated: () => void | Promise<void>
 }): React.JSX.Element {
   const [fields, setFields] = useState(() => queueFieldsFromDescription(queue))
-  const [error, setError] = useState<string | null>(null)
+  const { submit, submitting, error, reset } = useAsyncSubmit(
+    () => window.sbAdmin.entities.queues.update(profileId, queue.name, toUpdateQueueInput(fields)),
+    async () => {
+      onOpenChange(false)
+      await onUpdated()
+    }
+  )
 
   useEffect(() => {
     if (open) {
       setFields(queueFieldsFromDescription(queue))
-      setError(null)
+      reset()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, queue])
-
-  async function handleSubmit(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    const response = await window.sbAdmin.entities.queues.update(
-      profileId,
-      queue.name,
-      toUpdateQueueInput(fields)
-    )
-    if (response.ok) {
-      onOpenChange(false)
-      await onUpdated()
-    } else {
-      setError(response.error.message)
-    }
-  }
 
   return (
     <EditDialogShell
@@ -111,7 +108,8 @@ export function EditQueueDialog({
       open={open}
       onOpenChange={onOpenChange}
       error={error}
-      onSubmit={handleSubmit}
+      submitting={submitting}
+      onSubmit={submit}
     >
       <QueueFields idPrefix="edit-queue" mode="edit" state={fields} onChange={setFields} />
     </EditDialogShell>
@@ -132,29 +130,21 @@ export function EditTopicDialog({
   onUpdated: () => void | Promise<void>
 }): React.JSX.Element {
   const [fields, setFields] = useState(() => topicFieldsFromDescription(topic))
-  const [error, setError] = useState<string | null>(null)
+  const { submit, submitting, error, reset } = useAsyncSubmit(
+    () => window.sbAdmin.entities.topics.update(profileId, topic.name, toUpdateTopicInput(fields)),
+    async () => {
+      onOpenChange(false)
+      await onUpdated()
+    }
+  )
 
   useEffect(() => {
     if (open) {
       setFields(topicFieldsFromDescription(topic))
-      setError(null)
+      reset()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, topic])
-
-  async function handleSubmit(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    const response = await window.sbAdmin.entities.topics.update(
-      profileId,
-      topic.name,
-      toUpdateTopicInput(fields)
-    )
-    if (response.ok) {
-      onOpenChange(false)
-      await onUpdated()
-    } else {
-      setError(response.error.message)
-    }
-  }
 
   return (
     <EditDialogShell
@@ -162,7 +152,8 @@ export function EditTopicDialog({
       open={open}
       onOpenChange={onOpenChange}
       error={error}
-      onSubmit={handleSubmit}
+      submitting={submitting}
+      onSubmit={submit}
     >
       <TopicFields idPrefix="edit-topic" mode="edit" state={fields} onChange={setFields} />
     </EditDialogShell>
@@ -183,30 +174,27 @@ export function EditSubscriptionDialog({
   onUpdated: () => void | Promise<void>
 }): React.JSX.Element {
   const [fields, setFields] = useState(() => subscriptionFieldsFromDescription(subscription))
-  const [error, setError] = useState<string | null>(null)
+  const { submit, submitting, error, reset } = useAsyncSubmit(
+    () =>
+      window.sbAdmin.entities.subscriptions.update(
+        profileId,
+        subscription.topicName,
+        subscription.subscriptionName,
+        toUpdateSubscriptionInput(fields)
+      ),
+    async () => {
+      onOpenChange(false)
+      await onUpdated()
+    }
+  )
 
   useEffect(() => {
     if (open) {
       setFields(subscriptionFieldsFromDescription(subscription))
-      setError(null)
+      reset()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, subscription])
-
-  async function handleSubmit(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    const response = await window.sbAdmin.entities.subscriptions.update(
-      profileId,
-      subscription.topicName,
-      subscription.subscriptionName,
-      toUpdateSubscriptionInput(fields)
-    )
-    if (response.ok) {
-      onOpenChange(false)
-      await onUpdated()
-    } else {
-      setError(response.error.message)
-    }
-  }
 
   return (
     <EditDialogShell
@@ -214,7 +202,8 @@ export function EditSubscriptionDialog({
       open={open}
       onOpenChange={onOpenChange}
       error={error}
-      onSubmit={handleSubmit}
+      submitting={submitting}
+      onSubmit={submit}
     >
       <SubscriptionFields
         idPrefix="edit-subscription"

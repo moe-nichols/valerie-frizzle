@@ -4,10 +4,11 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   resolve: {
     alias: {
-      '@shared': resolve('src/shared')
+      '@shared': resolve('src/shared'),
+      '@renderer': resolve('src/renderer/src')
     }
   },
   test: {
-    include: ['tests/unit/**/*.test.ts']
+    include: ['tests/unit/**/*.test.{ts,tsx}']
   }
 })

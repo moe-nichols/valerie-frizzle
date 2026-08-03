@@ -10,10 +10,11 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { fetchSubscriptionMessageCount, formatMessageCount } from '@renderer/lib/messageCount'
+import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
 import { useEntityCounts } from '@renderer/lib/useEntityCounts'
 import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
 import { RefreshCw } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { MessageComposer } from '../messages/MessageComposer'
 import { EditSubscriptionDialog } from './EditEntityDialogs'
@@ -118,21 +119,19 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     }
   }
 
-  async function handleCreateSubscription(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    const response = await window.sbAdmin.entities.subscriptions.create(
-      profileId,
-      toCreateSubscriptionInput(topicName, newSubscriptionName, newSubscriptionFields)
-    )
-    if (response.ok) {
+  const createSubscription = useAsyncSubmit(
+    () =>
+      window.sbAdmin.entities.subscriptions.create(
+        profileId,
+        toCreateSubscriptionInput(topicName, newSubscriptionName, newSubscriptionFields)
+      ),
+    async () => {
       setNewSubscriptionName('')
       setNewSubscriptionFields(emptySubscriptionFields)
       setNewSubscriptionAdvancedOpen(false)
       await refresh()
-    } else {
-      setError(response.error.message)
     }
-  }
+  )
 
   async function handleDeleteSubscription(subscriptionName: string): Promise<void> {
     const response = await window.sbAdmin.entities.subscriptions.delete(
@@ -247,7 +246,12 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
               </li>
             ))}
           </ul>
-          <form onSubmit={handleCreateSubscription} className="space-y-3">
+          <form onSubmit={createSubscription.submit} className="space-y-3">
+            {createSubscription.error && (
+              <Alert variant="destructive">
+                <AlertDescription>{createSubscription.error}</AlertDescription>
+              </Alert>
+            )}
             <div className="flex items-end gap-2">
               <div className="space-y-1.5">
                 <Label htmlFor="new-subscription-name">New subscription name</Label>
@@ -258,7 +262,9 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                   required
                 />
               </div>
-              <Button type="submit">Add subscription</Button>
+              <Button type="submit" disabled={createSubscription.submitting}>
+                Add subscription
+              </Button>
             </div>
             <Collapsible
               open={newSubscriptionAdvancedOpen}
