@@ -23,15 +23,8 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem
 } from '@renderer/components/ui/sidebar'
+import { formatMessageCount } from '@renderer/lib/messageCount'
 import {
-  fetchQueueDeadLetterCount,
-  fetchQueueMessageCount,
-  formatMessageCount
-} from '@renderer/lib/messageCount'
-import { useEntityCounts } from '@renderer/lib/useEntityCounts'
-import { usePolling } from '@renderer/lib/usePolling'
-import {
-  entitiesRefreshed,
   queueDeleted,
   queueSelected,
   topicDeleted,
@@ -39,13 +32,12 @@ import {
 } from '@renderer/store/connectionsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 import type { QueueDescription, TopicDescription } from '@shared/domain'
-import { buildDeadLetterQueuePath } from '@shared/domain'
 import { MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { useState } from 'react'
 import { CreateQueueDialog } from './CreateQueueDialog'
 import { CreateTopicDialog } from './CreateTopicDialog'
 import { EditQueueDialog, EditTopicDialog } from './EditEntityDialogs'
+import { useEntityTreeData } from './useEntityTreeData'
 
 interface EntityTreeProps {
   profileId: string
@@ -60,73 +52,15 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
   const dispatch = useAppDispatch()
   const activeQueueName = useAppSelector((state) => state.connections.activeQueueName)
   const activeTopicName = useAppSelector((state) => state.connections.activeTopicName)
-  const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
 
-  const [queues, setQueues] = useState<QueueDescription[]>([])
-  const [topics, setTopics] = useState<TopicDescription[]>([])
-  const { counts: queueCounts, updateCounts: updateQueueCounts } = useEntityCounts()
-  const { counts: queueDlqCounts, updateCounts: updateQueueDlqCounts } = useEntityCounts()
-  const [error, setError] = useState<string | null>(null)
-  const [loaded, setLoaded] = useState(false)
+  const { queues, topics, queueCounts, queueDlqCounts, error, setError, loaded, refresh } =
+    useEntityTreeData(profileId)
 
   const [createQueueOpen, setCreateQueueOpen] = useState(false)
   const [createTopicOpen, setCreateTopicOpen] = useState(false)
   const [editingQueue, setEditingQueue] = useState<QueueDescription | null>(null)
   const [editingTopic, setEditingTopic] = useState<TopicDescription | null>(null)
   const [deleting, setDeleting] = useState<DeletingEntity | null>(null)
-
-  async function fetchEntities(viaPoll: boolean): Promise<void> {
-    const [queuesResponse, topicsResponse] = await Promise.all([
-      window.sbAdmin.entities.queues.list(profileId),
-      window.sbAdmin.entities.topics.list(profileId)
-    ])
-    // The slice clears any active selection the fresh listings no longer contain (an
-    // entity deleted from outside this app must not keep a stale panel open).
-    dispatch(
-      entitiesRefreshed({
-        profileId,
-        queueNames: queuesResponse.ok ? queuesResponse.data.map((queue) => queue.name) : undefined,
-        topicNames: topicsResponse.ok ? topicsResponse.data.map((topic) => topic.name) : undefined
-      })
-    )
-    // A single error is set at the end so one list's success doesn't wipe the other's
-    // failure, and a fully successful poll clears a stale error from an earlier blip.
-    let nextError: string | null = null
-    if (queuesResponse.ok) {
-      setQueues(queuesResponse.data)
-      const queueNames = queuesResponse.data.map((queue) => queue.name)
-      await Promise.all([
-        updateQueueCounts(queueNames, (name) => fetchQueueMessageCount(profileId, name)),
-        updateQueueDlqCounts(queueNames, (name) =>
-          fetchQueueDeadLetterCount(profileId, buildDeadLetterQueuePath(name))
-        )
-      ])
-    } else {
-      nextError = queuesResponse.error.message
-    }
-    if (topicsResponse.ok) {
-      setTopics(topicsResponse.data)
-    } else {
-      nextError = nextError ?? topicsResponse.error.message
-    }
-    // Background poll failures toast instead of pinning the sidebar alert; a manual/initial
-    // refresh still surfaces inline where the user is looking.
-    if (nextError && viaPoll) {
-      toast.error(nextError)
-    } else {
-      setError(nextError)
-    }
-    setLoaded(true)
-  }
-
-  // All refreshes — timer ticks, the Refresh buttons, and post-create/delete reloads — go
-  // through this one guarded runner so they can't interleave and clobber newer state.
-  const refresh = usePolling(fetchEntities, pollIntervalMs)
-
-  useEffect(() => {
-    refresh()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileId])
 
   async function handleConfirmDelete(): Promise<void> {
     if (!deleting) return
