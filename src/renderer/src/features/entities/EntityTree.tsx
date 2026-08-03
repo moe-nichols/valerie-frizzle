@@ -43,6 +43,7 @@ import {
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 import { CreateQueueDialog } from './CreateQueueDialog'
 import { CreateTopicDialog } from './CreateTopicDialog'
+import { EditQueueDialog, EditTopicDialog } from './EditEntityDialogs'
 
 interface EntityTreeProps {
   profileId: string
@@ -67,6 +68,8 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
 
   const [createQueueOpen, setCreateQueueOpen] = useState(false)
   const [createTopicOpen, setCreateTopicOpen] = useState(false)
+  const [editingQueue, setEditingQueue] = useState<QueueDescription | null>(null)
+  const [editingTopic, setEditingTopic] = useState<TopicDescription | null>(null)
   const [deleting, setDeleting] = useState<DeletingEntity | null>(null)
 
   async function refresh(): Promise<void> {
@@ -231,6 +234,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="right" align="start">
+                <DropdownMenuItem onClick={() => setEditingQueue(queue)}>Edit</DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={() => setDeleting({ kind: 'queue', name: queue.name })}
@@ -291,6 +295,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="right" align="start">
+                <DropdownMenuItem onClick={() => setEditingTopic(topic)}>Edit</DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={() => setDeleting({ kind: 'topic', name: topic.name })}
@@ -315,6 +320,25 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         onOpenChange={setCreateTopicOpen}
         onCreated={refresh}
       />
+
+      {editingQueue && (
+        <EditQueueDialog
+          profileId={profileId}
+          queue={editingQueue}
+          open={editingQueue !== null}
+          onOpenChange={(nextOpen) => !nextOpen && setEditingQueue(null)}
+          onUpdated={refresh}
+        />
+      )}
+      {editingTopic && (
+        <EditTopicDialog
+          profileId={profileId}
+          topic={editingTopic}
+          open={editingTopic !== null}
+          onOpenChange={(nextOpen) => !nextOpen && setEditingTopic(null)}
+          onUpdated={refresh}
+        />
+      )}
 
       <AlertDialog
         open={deleting !== null}

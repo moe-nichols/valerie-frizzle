@@ -15,6 +15,17 @@ import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import { usePolling } from '@renderer/lib/usePolling'
 import { useAppSelector } from '@renderer/store/hooks'
 import { MessageComposer } from '../messages/MessageComposer'
+import { EditSubscriptionDialog } from './EditEntityDialogs'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger
+} from '@renderer/components/ui/collapsible'
+import {
+  emptySubscriptionFields,
+  SubscriptionFields,
+  toCreateSubscriptionInput
+} from './entityForms'
 import { SubscriptionMessages } from './SubscriptionMessages'
 import { SubscriptionRules } from './SubscriptionRules'
 
@@ -35,6 +46,11 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
   >({})
   const [error, setError] = useState<string | null>(null)
   const [newSubscriptionName, setNewSubscriptionName] = useState('')
+  const [newSubscriptionFields, setNewSubscriptionFields] = useState(emptySubscriptionFields)
+  const [newSubscriptionAdvancedOpen, setNewSubscriptionAdvancedOpen] = useState(false)
+  const [editingSubscription, setEditingSubscription] = useState<SubscriptionDescription | null>(
+    null
+  )
   const isCurrent = useIsCurrent(`${profileId}::${topicName}`)
 
   // The two refreshers report their error rather than writing shared `error` state
@@ -110,12 +126,14 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
 
   async function handleCreateSubscription(event: FormEvent): Promise<void> {
     event.preventDefault()
-    const response = await window.sbAdmin.entities.subscriptions.create(profileId, {
-      topicName,
-      subscriptionName: newSubscriptionName
-    })
+    const response = await window.sbAdmin.entities.subscriptions.create(
+      profileId,
+      toCreateSubscriptionInput(topicName, newSubscriptionName, newSubscriptionFields)
+    )
     if (response.ok) {
       setNewSubscriptionName('')
+      setNewSubscriptionFields(emptySubscriptionFields)
+      setNewSubscriptionAdvancedOpen(false)
       setError(await refreshSubscriptions())
     } else {
       setError(response.error.message)
@@ -183,9 +201,16 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                       </Badge>
                     )}
                   <Button
-                    variant="destructive"
+                    variant="outline"
                     size="sm"
                     className="ml-auto"
+                    onClick={() => setEditingSubscription(subscription)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
                     onClick={() => handleDeleteSubscription(subscription.subscriptionName)}
                   >
                     Delete
@@ -204,20 +229,50 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
               </li>
             ))}
           </ul>
-          <form onSubmit={handleCreateSubscription} className="flex items-end gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-subscription-name">New subscription name</Label>
-              <Input
-                id="new-subscription-name"
-                value={newSubscriptionName}
-                onChange={(event) => setNewSubscriptionName(event.target.value)}
-                required
-              />
+          <form onSubmit={handleCreateSubscription} className="space-y-3">
+            <div className="flex items-end gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="new-subscription-name">New subscription name</Label>
+                <Input
+                  id="new-subscription-name"
+                  value={newSubscriptionName}
+                  onChange={(event) => setNewSubscriptionName(event.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit">Add subscription</Button>
             </div>
-            <Button type="submit">Add subscription</Button>
+            <Collapsible
+              open={newSubscriptionAdvancedOpen}
+              onOpenChange={setNewSubscriptionAdvancedOpen}
+            >
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="ghost" size="sm">
+                  {newSubscriptionAdvancedOpen ? 'Hide advanced' : 'Advanced…'}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="max-w-md pt-2">
+                <SubscriptionFields
+                  idPrefix="new-subscription"
+                  mode="create"
+                  state={newSubscriptionFields}
+                  onChange={setNewSubscriptionFields}
+                />
+              </CollapsibleContent>
+            </Collapsible>
           </form>
         </div>
       </CardContent>
+
+      {editingSubscription && (
+        <EditSubscriptionDialog
+          profileId={profileId}
+          subscription={editingSubscription}
+          open={editingSubscription !== null}
+          onOpenChange={(nextOpen) => !nextOpen && setEditingSubscription(null)}
+          onUpdated={async () => setError(await refreshSubscriptions())}
+        />
+      )}
     </Card>
   )
 }
