@@ -10,6 +10,8 @@ let adminService: AdminService;
 let sbClient: ServiceBusClient;
 let messagingService: MessagingService;
 const queueName = `test-messages-queue-${Date.now()}`;
+const topicName = `test-messages-topic-${Date.now()}`;
+const subscriptionName = "test-messages-sub";
 
 beforeAll(async () => {
   proxy = await startAdminHttpsProxy(TEST_MANAGEMENT_PORT);
@@ -19,6 +21,8 @@ beforeAll(async () => {
   });
   adminService = new AdminService(adminClient);
   await adminService.createQueue({ name: queueName });
+  await adminService.createTopic({ name: topicName });
+  await adminService.createSubscription({ topicName, subscriptionName });
 
   sbClient = new ServiceBusClient(TEST_MESSAGING_CONNECTION_STRING);
   messagingService = new MessagingService(sbClient);
@@ -28,6 +32,7 @@ afterAll(async () => {
   await messagingService.close();
   await sbClient.close();
   await adminService.deleteQueue(queueName);
+  await adminService.deleteTopic(topicName);
   await proxy.close();
 });
 
@@ -175,5 +180,20 @@ describe("MessagingService — PeekLock vs ReceiveAndDelete behave differently",
 
     const afterComplete = await messagingService.receiveMessages(queueName, 10, "peekLock", 2000);
     expect(afterComplete.find((m) => m.messageId === "msg-complete-1")).toBeUndefined();
+  });
+});
+
+describe("MessagingService — peekSubscriptionMessages", () => {
+  test("a message sent to a topic is visible via its subscription's peek", async () => {
+    await messagingService.sendMessage(topicName, {
+      body: "fan-out me",
+      bodyMode: "text",
+      messageId: "msg-sub-peek-1",
+    });
+
+    const messages = await messagingService.peekSubscriptionMessages(topicName, subscriptionName, 20, 0);
+    const found = messages.find((m) => m.messageId === "msg-sub-peek-1");
+    expect(found).toBeDefined();
+    expect(found?.body).toBe("fan-out me");
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MoreHorizontal, Plus } from 'lucide-react'
+import { MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
 import type { QueueDescription, TopicDescription } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import {
@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
+import { Badge } from '@renderer/components/ui/badge'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import {
   DropdownMenu,
@@ -25,6 +26,12 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem
 } from '@renderer/components/ui/sidebar'
+import {
+  fetchQueueMessageCount,
+  formatMessageCount,
+  type MessageCountResult
+} from '@renderer/lib/messageCount'
+import { usePolling } from '@renderer/lib/usePolling'
 import {
   queueDeleted,
   queueSelected,
@@ -48,9 +55,11 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
   const dispatch = useAppDispatch()
   const activeQueueName = useAppSelector((state) => state.connections.activeQueueName)
   const activeTopicName = useAppSelector((state) => state.connections.activeTopicName)
+  const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
 
   const [queues, setQueues] = useState<QueueDescription[]>([])
   const [topics, setTopics] = useState<TopicDescription[]>([])
+  const [queueCounts, setQueueCounts] = useState<Record<string, MessageCountResult>>({})
   const [error, setError] = useState<string | null>(null)
 
   const [createQueueOpen, setCreateQueueOpen] = useState(false)
@@ -63,11 +72,38 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
       window.sbAdmin.entities.topics.list(profileId)
     ])
     if (queuesResponse.ok) {
+      // A queue/topic that disappeared server-side (deleted from outside this app, or by
+      // another connection to the same emulator) should stop being "active" here too — an
+      // open panel for it would otherwise keep showing stale data forever.
+      const newNames = new Set(queuesResponse.data.map((queue) => queue.name))
+      for (const queue of queues) {
+        if (!newNames.has(queue.name)) dispatch(queueDeleted(queue.name))
+      }
       setQueues(queuesResponse.data)
+
+      const counts = await Promise.all(
+        queuesResponse.data.map((queue) => fetchQueueMessageCount(profileId, queue.name))
+      )
+      setQueueCounts((prev) => {
+        const next: Record<string, MessageCountResult> = {}
+        queuesResponse.data.forEach((queue, index) => {
+          const count = counts[index]
+          if (count) {
+            next[queue.name] = count
+          } else if (prev[queue.name]) {
+            next[queue.name] = prev[queue.name]
+          }
+        })
+        return next
+      })
     } else {
       setError(queuesResponse.error.message)
     }
     if (topicsResponse.ok) {
+      const newNames = new Set(topicsResponse.data.map((topic) => topic.name))
+      for (const topic of topics) {
+        if (!newNames.has(topic.name)) dispatch(topicDeleted(topic.name))
+      }
       setTopics(topicsResponse.data)
     } else {
       setError(topicsResponse.error.message)
@@ -78,6 +114,8 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId])
+
+  usePolling(refresh, pollIntervalMs)
 
   async function handleConfirmDelete(): Promise<void> {
     if (!deleting) return
@@ -108,16 +146,28 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
       <SidebarMenuSub className="border-l-0 px-0">
         <div className="flex items-center justify-between px-2">
           <SidebarGroupLabel className="p-0">Queues</SidebarGroupLabel>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-5"
-            title="Add queue"
-            onClick={() => setCreateQueueOpen(true)}
-          >
-            <Plus />
-            <span className="sr-only">Add queue</span>
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-5"
+              title="Refresh now"
+              onClick={() => refresh()}
+            >
+              <RefreshCw />
+              <span className="sr-only">Refresh now</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-5"
+              title="Add queue"
+              onClick={() => setCreateQueueOpen(true)}
+            >
+              <Plus />
+              <span className="sr-only">Add queue</span>
+            </Button>
+          </div>
         </div>
         {queues.length === 0 && (
           <p className="text-muted-foreground px-2 text-xs">No queues yet.</p>
@@ -133,6 +183,11 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
                 <span className="truncate">{queue.name}</span>
               </button>
             </SidebarMenuSubButton>
+            {queueCounts[queue.name] && (
+              <Badge variant="secondary" className="shrink-0">
+                {formatMessageCount(queueCounts[queue.name])}
+              </Badge>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-5 shrink-0">
@@ -156,16 +211,28 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
       <SidebarMenuSub className="border-l-0 px-0">
         <div className="flex items-center justify-between px-2">
           <SidebarGroupLabel className="p-0">Topics</SidebarGroupLabel>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-5"
-            title="Add topic"
-            onClick={() => setCreateTopicOpen(true)}
-          >
-            <Plus />
-            <span className="sr-only">Add topic</span>
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-5"
+              title="Refresh now"
+              onClick={() => refresh()}
+            >
+              <RefreshCw />
+              <span className="sr-only">Refresh now</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-5"
+              title="Add topic"
+              onClick={() => setCreateTopicOpen(true)}
+            >
+              <Plus />
+              <span className="sr-only">Add topic</span>
+            </Button>
+          </div>
         </div>
         {topics.length === 0 && (
           <p className="text-muted-foreground px-2 text-xs">No topics yet.</p>

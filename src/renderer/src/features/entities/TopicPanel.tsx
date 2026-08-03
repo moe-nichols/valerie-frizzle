@@ -1,10 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
+import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
+import {
+  fetchSubscriptionMessageCount,
+  formatMessageCount,
+  type MessageCountResult
+} from '@renderer/lib/messageCount'
+import { usePolling } from '@renderer/lib/usePolling'
+import { useAppSelector } from '@renderer/store/hooks'
 import { MessageComposer } from '../messages/MessageComposer'
 import { SubscriptionRules } from './SubscriptionRules'
 
@@ -14,42 +22,65 @@ interface TopicPanelProps {
 }
 
 export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX.Element {
+  const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
   const [topic, setTopic] = useState<TopicDescription | null>(null)
   const [subscriptions, setSubscriptions] = useState<SubscriptionDescription[]>([])
+  const [subscriptionCounts, setSubscriptionCounts] = useState<Record<string, MessageCountResult>>(
+    {}
+  )
   const [error, setError] = useState<string | null>(null)
   const [newSubscriptionName, setNewSubscriptionName] = useState('')
 
-  async function refreshSubscriptions(): Promise<void> {
-    const response = await window.sbAdmin.entities.subscriptions.list(profileId, topicName)
+  async function refreshTopic(): Promise<void> {
+    const response = await window.sbAdmin.entities.topics.get(profileId, topicName)
     if (response.ok) {
-      setSubscriptions(response.data)
+      setTopic(response.data)
     } else {
       setError(response.error.message)
     }
   }
 
+  async function refreshSubscriptions(): Promise<void> {
+    const response = await window.sbAdmin.entities.subscriptions.list(profileId, topicName)
+    if (!response.ok) {
+      setError(response.error.message)
+      return
+    }
+    setSubscriptions(response.data)
+
+    const counts = await Promise.all(
+      response.data.map((subscription) =>
+        fetchSubscriptionMessageCount(profileId, topicName, subscription.subscriptionName)
+      )
+    )
+    setSubscriptionCounts((prev) => {
+      const next: Record<string, MessageCountResult> = {}
+      response.data.forEach((subscription, index) => {
+        const count = counts[index]
+        if (count) {
+          next[subscription.subscriptionName] = count
+        } else if (prev[subscription.subscriptionName]) {
+          next[subscription.subscriptionName] = prev[subscription.subscriptionName]
+        }
+      })
+      return next
+    })
+  }
+
+  async function refresh(): Promise<void> {
+    await Promise.all([refreshTopic(), refreshSubscriptions()])
+  }
+
   useEffect(() => {
     setTopic(null)
     setSubscriptions([])
+    setSubscriptionCounts({})
     setError(null)
-    async function load(): Promise<void> {
-      const [topicResponse, subscriptionsResponse] = await Promise.all([
-        window.sbAdmin.entities.topics.get(profileId, topicName),
-        window.sbAdmin.entities.subscriptions.list(profileId, topicName)
-      ])
-      if (topicResponse.ok) {
-        setTopic(topicResponse.data)
-      } else {
-        setError(topicResponse.error.message)
-      }
-      if (subscriptionsResponse.ok) {
-        setSubscriptions(subscriptionsResponse.data)
-      } else {
-        setError(subscriptionsResponse.error.message)
-      }
-    }
-    load()
+    refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId, topicName])
+
+  usePolling(refresh, pollIntervalMs)
 
   async function handleCreateSubscription(event: FormEvent): Promise<void> {
     event.preventDefault()
@@ -114,6 +145,11 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                   <span className="text-muted-foreground">
                     ({subscription.status}, max delivery {subscription.maxDeliveryCount})
                   </span>
+                  {subscriptionCounts[subscription.subscriptionName] && (
+                    <Badge variant="secondary">
+                      {formatMessageCount(subscriptionCounts[subscription.subscriptionName])} active
+                    </Badge>
+                  )}
                   <Button
                     variant="destructive"
                     size="sm"

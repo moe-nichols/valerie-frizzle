@@ -19,6 +19,17 @@ export function registerMessagesIpcHandlers(connectionManager: ConnectionManager
       .peekMessages(request.entityPath, request.maxCount, request.fromSequenceNumber)
   )
 
+  registerHandler('messages:peekSubscription', (request) =>
+    connectionManager
+      .getMessagingService(request.profileId)
+      .peekSubscriptionMessages(
+        request.topicName,
+        request.subscriptionName,
+        request.maxCount,
+        request.fromSequenceNumber
+      )
+  )
+
   registerHandler('messages:receive', (request) =>
     connectionManager
       .getMessagingService(request.profileId)

@@ -24,10 +24,7 @@ const sequenceNumber = z.number().int().nonnegative()
 const receiveMode = z.enum(['peekLock', 'receiveAndDelete'])
 const durationString = z.string()
 
-const applicationProperties = z.record(
-  z.string(),
-  z.union([z.string(), z.number(), z.boolean()])
-)
+const applicationProperties = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
 
 const messageEnvelope = z.object({
   body: z.string(),
@@ -133,6 +130,9 @@ export const ipcRequestSchemas: {
 } = {
   'app:ping': z.object({ message: z.string() }),
 
+  'preferences:pollInterval:get': z.undefined(),
+  'preferences:pollInterval:set': z.object({ pollIntervalMs: z.number().int().positive() }),
+
   'connections:list': z.undefined(),
   'connections:create': z.object({
     name: nonEmptyString,
@@ -216,6 +216,13 @@ export const ipcRequestSchemas: {
   'messages:peek': z.object({
     profileId: nonEmptyString,
     entityPath: nonEmptyString,
+    maxCount: batchCount,
+    fromSequenceNumber: sequenceNumber.optional()
+  }),
+  'messages:peekSubscription': z.object({
+    profileId: nonEmptyString,
+    topicName: nonEmptyString,
+    subscriptionName: nonEmptyString,
     maxCount: batchCount,
     fromSequenceNumber: sequenceNumber.optional()
   }),

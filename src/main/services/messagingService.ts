@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import Long from 'long'
-import type { ServiceBusClient, ServiceBusReceivedMessage, ServiceBusReceiver } from '@azure/service-bus'
+import type {
+  ServiceBusClient,
+  ServiceBusReceivedMessage,
+  ServiceBusReceiver
+} from '@azure/service-bus'
 import type {
   MessageEnvelope,
   ReceivedMessageDescription,
@@ -116,6 +120,30 @@ export class MessagingService {
     }
   }
 
+  /**
+   * Peeking a subscription isn't just a queue peek with a different path — the SDK
+   * addresses subscriptions via a distinct two-arg `createReceiver(topicName,
+   * subscriptionName)` overload (confirmed by reading the SDK's type declarations),
+   * unlike a DLQ, which really is just a suffix on the same single-path call.
+   */
+  async peekSubscriptionMessages(
+    topicName: string,
+    subscriptionName: string,
+    maxCount: number,
+    fromSequenceNumber?: number
+  ): Promise<ReceivedMessageDescription[]> {
+    const receiver = this.client.createReceiver(topicName, subscriptionName)
+    try {
+      const messages = await receiver.peekMessages(maxCount, {
+        fromSequenceNumber:
+          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
+      })
+      return messages.map((message) => toReceivedMessageDescription(message))
+    } finally {
+      await receiver.close()
+    }
+  }
+
   async receiveMessages(
     entityPath: string,
     maxCount: number,
@@ -126,7 +154,9 @@ export class MessagingService {
 
     if (mode === 'receiveAndDelete') {
       try {
-        const messages = await receiver.receiveMessages(maxCount, { maxWaitTimeInMs: maxWaitTimeMs })
+        const messages = await receiver.receiveMessages(maxCount, {
+          maxWaitTimeInMs: maxWaitTimeMs
+        })
         return messages.map((message) => toReceivedMessageDescription(message))
       } finally {
         await receiver.close()

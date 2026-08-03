@@ -10,6 +10,7 @@ import {
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
+import { PEEK_COUNT_CAP, PEEK_FROM_START } from '@renderer/lib/messageCount'
 
 interface QueuePurgeControlProps {
   profileId: string
@@ -24,22 +25,6 @@ interface PurgeProgressState {
   done: boolean
   stoppedAtCap: boolean
 }
-
-// The emulator's admin API returns no message-count data at all for queues (confirmed:
-// GET-queue response has no CountDetails/SizeInBytes, even with real messages present —
-// see the comment in adminService.ts), so the purge confirmation count comes from
-// peeking instead. Peek is capped here rather than uncapped, so this shows "N+" once the
-// cap is hit instead of an exact count.
-const PEEK_COUNT_CAP = 250
-
-// Without an explicit fromSequenceNumber, Service Bus peek continues from wherever the
-// entity's peek cursor last was — a server-side, per-entity cursor shared across every
-// caller, not scoped to this component or even this connection. If the message browser
-// (or anything else) already peeked this queue, an unscoped peek here would silently
-// undercount (confirmed via a driven-UI run: browsing first, then purging, showed "0
-// active messages" for a queue that still had 3). Passing 0 always re-peeks from the
-// very first message regardless of any prior peek activity elsewhere in the app.
-const PEEK_FROM_START = 0
 
 export function QueuePurgeControl({
   profileId,
@@ -62,7 +47,12 @@ export function QueuePurgeControl({
 
   async function handlePurgeClick(): Promise<void> {
     setError(null)
-    const response = await window.sbAdmin.messages.peek(profileId, entityPath, PEEK_COUNT_CAP, PEEK_FROM_START)
+    const response = await window.sbAdmin.messages.peek(
+      profileId,
+      entityPath,
+      PEEK_COUNT_CAP,
+      PEEK_FROM_START
+    )
     if (response.ok) {
       setMessageCount(response.data.length)
       setMessageCountIsApproximate(response.data.length === PEEK_COUNT_CAP)
@@ -83,19 +73,22 @@ export function QueuePurgeControl({
       return
     }
 
-    const unsubscribe = window.sbAdmin.messages.onPurgeProgress(startResponse.data.jobId, (event) => {
-      setProgress({
-        deletedCount: event.deletedCount,
-        done: event.done,
-        stoppedAtCap: event.stoppedAtCap ?? false
-      })
-      if (event.error) {
-        setError(event.error)
+    const unsubscribe = window.sbAdmin.messages.onPurgeProgress(
+      startResponse.data.jobId,
+      (event) => {
+        setProgress({
+          deletedCount: event.deletedCount,
+          done: event.done,
+          stoppedAtCap: event.stoppedAtCap ?? false
+        })
+        if (event.error) {
+          setError(event.error)
+        }
+        if (event.done) {
+          unsubscribe()
+        }
       }
-      if (event.done) {
-        unsubscribe()
-      }
-    })
+    )
   }
 
   function handleCancel(): void {

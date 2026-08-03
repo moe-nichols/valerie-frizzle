@@ -22,6 +22,14 @@ export interface IpcChannels {
     request: { message: string }
     response: Result<{ echo: string; timestamp: number }>
   }
+  'preferences:pollInterval:get': {
+    request: undefined
+    response: Result<number>
+  }
+  'preferences:pollInterval:set': {
+    request: { pollIntervalMs: number }
+    response: Result<number>
+  }
   'connections:list': {
     request: undefined
     response: Result<ConnectionProfile[]>
@@ -137,7 +145,22 @@ export interface IpcChannels {
     response: Result<undefined>
   }
   'messages:peek': {
-    request: { profileId: string; entityPath: string; maxCount: number; fromSequenceNumber?: number }
+    request: {
+      profileId: string
+      entityPath: string
+      maxCount: number
+      fromSequenceNumber?: number
+    }
+    response: Result<ReceivedMessageDescription[]>
+  }
+  'messages:peekSubscription': {
+    request: {
+      profileId: string
+      topicName: string
+      subscriptionName: string
+      maxCount: number
+      fromSequenceNumber?: number
+    }
     response: Result<ReceivedMessageDescription[]>
   }
   'messages:receive': {

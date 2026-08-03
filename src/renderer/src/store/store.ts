@@ -1,9 +1,11 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { connectionsReducer } from './connectionsSlice'
+import { settingsReducer } from './settingsSlice'
 
 export const store = configureStore({
   reducer: {
-    connections: connectionsReducer
+    connections: connectionsReducer,
+    settings: settingsReducer
   }
 })
 

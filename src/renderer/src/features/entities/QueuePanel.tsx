@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react'
 import type { QueueDescription } from '@shared/domain'
 import { buildDeadLetterQueuePath } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
+import { Badge } from '@renderer/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
+import {
+  fetchQueueMessageCount,
+  formatMessageCount,
+  type MessageCountResult
+} from '@renderer/lib/messageCount'
+import { usePolling } from '@renderer/lib/usePolling'
+import { useAppSelector } from '@renderer/store/hooks'
 import { MessageBrowser } from '../messages/MessageBrowser'
 import { MessageComposer } from '../messages/MessageComposer'
 import { QueuePurgeControl } from './QueuePurgeControl'
@@ -13,28 +21,40 @@ interface QueuePanelProps {
 }
 
 export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX.Element {
+  const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
   const [queue, setQueue] = useState<QueueDescription | null>(null)
+  const [count, setCount] = useState<MessageCountResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  async function refresh(): Promise<void> {
+    const [queueResponse, countResult] = await Promise.all([
+      window.sbAdmin.entities.queues.get(profileId, queueName),
+      fetchQueueMessageCount(profileId, queueName)
+    ])
+    if (queueResponse.ok) {
+      setQueue(queueResponse.data)
+    } else {
+      setError(queueResponse.error.message)
+    }
+    if (countResult) setCount(countResult)
+  }
 
   useEffect(() => {
     setQueue(null)
+    setCount(null)
     setError(null)
-    async function load(): Promise<void> {
-      const response = await window.sbAdmin.entities.queues.get(profileId, queueName)
-      if (response.ok) {
-        setQueue(response.data)
-      } else {
-        setError(response.error.message)
-      }
-    }
-    load()
+    refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId, queueName])
+
+  usePolling(refresh, pollIntervalMs)
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2 text-xl">
           {queueName}
+          {count && <Badge variant="secondary">{formatMessageCount(count)} active</Badge>}
           <QueuePurgeControl profileId={profileId} entityPath={queueName} />
         </CardTitle>
         {queue && (

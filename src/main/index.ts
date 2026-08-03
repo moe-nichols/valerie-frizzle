@@ -127,7 +127,7 @@ if (!gotSingleInstanceLock) {
       optimizer.watchWindowShortcuts(window)
     })
 
-    registerIpcHandlers(profilesRepo, connectionManager)
+    registerIpcHandlers(profilesRepo, preferencesRepo, connectionManager)
     createWindow(preferencesRepo)
     log.info('app ready')
 

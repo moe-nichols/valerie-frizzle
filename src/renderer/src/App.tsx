@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { Radio } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
@@ -11,12 +13,19 @@ import { Toaster } from '@renderer/components/ui/sonner'
 import { ConnectionSidebar } from './features/connections/ConnectionSidebar'
 import { QueuePanel } from './features/entities/QueuePanel'
 import { TopicPanel } from './features/entities/TopicPanel'
-import { useAppSelector } from './store/hooks'
+import { SettingsButton } from './features/settings/SettingsButton'
+import { fetchPollInterval } from './store/settingsSlice'
+import { useAppDispatch, useAppSelector } from './store/hooks'
 
 function App(): React.JSX.Element {
+  const dispatch = useAppDispatch()
   const selectedProfileId = useAppSelector((state) => state.connections.selectedProfileId)
   const activeQueueName = useAppSelector((state) => state.connections.activeQueueName)
   const activeTopicName = useAppSelector((state) => state.connections.activeTopicName)
+
+  useEffect(() => {
+    dispatch(fetchPollInterval())
+  }, [dispatch])
 
   return (
     <SidebarProvider>
@@ -32,6 +41,9 @@ function App(): React.JSX.Element {
         <SidebarContent>
           <ConnectionSidebar />
         </SidebarContent>
+        <SidebarFooter>
+          <SettingsButton />
+        </SidebarFooter>
       </Sidebar>
 
       <SidebarInset>
