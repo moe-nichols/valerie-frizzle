@@ -19,6 +19,8 @@
     }
   },
   // src/preload/index.d.ts provides the Window.sbAdmin augmentation that renderer-facing
-  // tests (slices, hooks, messageCount) rely on.
+  // tests (slices, hooks, messageCount) rely on. src/main and src/renderer are not listed
+  // because tests import from them directly, so tsc pulls those files in transitively;
+  // they are typechecked as roots by tsconfig.node.json / tsconfig.web.json.
   "include": ["scripts", "src/shared", "src/preload/index.d.ts", "tests"]
 }

@@ -13,7 +13,8 @@
     "test:unit": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json",
-    "lint": "biome lint"
+    "lint": "biome check",
+    "format": "biome format --write"
   },
   "dependencies": {
     "@azure/service-bus": "^7.9.5",

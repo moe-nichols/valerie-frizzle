@@ -75,13 +75,15 @@ for why the two are independent.
 ```sh
 npm run dev
 npm run typecheck  # tsc against the node + web tsconfigs
-npm run lint       # Biome (linter only; formatting is left as-is)
+npm run lint       # Biome (lint + format check)
+npm run format     # Biome formatter, writes in place
 ```
 
 Linting is Biome rather than ESLint: the project runs TypeScript 7, which
 `typescript-eslint` does not yet support, whereas Biome's parser is independent of the
-installed TypeScript version. The formatter is intentionally left off so it doesn't churn
-the existing hand-formatting; see `biome.json` for the (lightly tuned) rule set.
+installed TypeScript version. Biome also formats the codebase (2-space indent, single
+quotes, no semicolons); `npm run lint` fails on unformatted code, `npm run format` fixes
+it. See `biome.json` for the (lightly tuned) rule set.
 
 ## Testing
 
