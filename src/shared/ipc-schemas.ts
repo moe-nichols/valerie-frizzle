@@ -226,6 +226,19 @@ export const ipcRequestSchemas: {
     maxCount: batchCount,
     fromSequenceNumber: sequenceNumber.optional()
   }),
+  'messages:count': z.object({
+    profileId: nonEmptyString,
+    entityPath: nonEmptyString,
+    maxCount: batchCount,
+    fromSequenceNumber: sequenceNumber.optional()
+  }),
+  'messages:countSubscription': z.object({
+    profileId: nonEmptyString,
+    topicName: nonEmptyString,
+    subscriptionName: nonEmptyString,
+    maxCount: batchCount,
+    fromSequenceNumber: sequenceNumber.optional()
+  }),
   'messages:receive': z.object({
     profileId: nonEmptyString,
     entityPath: nonEmptyString,

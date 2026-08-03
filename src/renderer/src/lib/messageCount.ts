@@ -17,8 +17,8 @@ export interface MessageCountResult {
   approximate: boolean
 }
 
-function toResult(data: { length: number }): MessageCountResult {
-  return { count: data.length, approximate: data.length === PEEK_COUNT_CAP }
+function toResult(count: number): MessageCountResult {
+  return { count, approximate: count === PEEK_COUNT_CAP }
 }
 
 /** Returns `null` on failure — callers should show nothing rather than a misleading zero. */
@@ -26,7 +26,7 @@ export async function fetchQueueMessageCount(
   profileId: string,
   entityPath: string
 ): Promise<MessageCountResult | null> {
-  const response = await window.sbAdmin.messages.peek(
+  const response = await window.sbAdmin.messages.count(
     profileId,
     entityPath,
     PEEK_COUNT_CAP,
@@ -41,7 +41,7 @@ export async function fetchSubscriptionMessageCount(
   topicName: string,
   subscriptionName: string
 ): Promise<MessageCountResult | null> {
-  const response = await window.sbAdmin.messages.peekSubscription(
+  const response = await window.sbAdmin.messages.countSubscription(
     profileId,
     topicName,
     subscriptionName,

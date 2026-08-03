@@ -71,6 +71,9 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
       window.sbAdmin.entities.queues.list(profileId),
       window.sbAdmin.entities.topics.list(profileId)
     ])
+    // A single error is set at the end so one list's success doesn't wipe the other's
+    // failure, and a fully successful poll clears a stale error from an earlier blip.
+    let nextError: string | null = null
     if (queuesResponse.ok) {
       // A queue/topic that disappeared server-side (deleted from outside this app, or by
       // another connection to the same emulator) should stop being "active" here too — an
@@ -97,7 +100,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         return next
       })
     } else {
-      setError(queuesResponse.error.message)
+      nextError = queuesResponse.error.message
     }
     if (topicsResponse.ok) {
       const newNames = new Set(topicsResponse.data.map((topic) => topic.name))
@@ -106,8 +109,9 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
       }
       setTopics(topicsResponse.data)
     } else {
-      setError(topicsResponse.error.message)
+      nextError = nextError ?? topicsResponse.error.message
     }
+    setError(nextError)
   }
 
   useEffect(() => {

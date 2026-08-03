@@ -9,6 +9,7 @@ import {
   formatMessageCount,
   type MessageCountResult
 } from '@renderer/lib/messageCount'
+import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import { usePolling } from '@renderer/lib/usePolling'
 import { useAppSelector } from '@renderer/store/hooks'
 import { MessageBrowser } from '../messages/MessageBrowser'
@@ -25,14 +26,19 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
   const [queue, setQueue] = useState<QueueDescription | null>(null)
   const [count, setCount] = useState<MessageCountResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const isCurrent = useIsCurrent(`${profileId}::${queueName}`)
 
   async function refresh(): Promise<void> {
     const [queueResponse, countResult] = await Promise.all([
       window.sbAdmin.entities.queues.get(profileId, queueName),
       fetchQueueMessageCount(profileId, queueName)
     ])
+    // A slower in-flight refresh from a prior selection must not overwrite the panel that
+    // now shows a different queue.
+    if (!isCurrent()) return
     if (queueResponse.ok) {
       setQueue(queueResponse.data)
+      setError(null)
     } else {
       setError(queueResponse.error.message)
     }

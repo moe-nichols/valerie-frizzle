@@ -30,6 +30,23 @@ export function registerMessagesIpcHandlers(connectionManager: ConnectionManager
       )
   )
 
+  registerHandler('messages:count', (request) =>
+    connectionManager
+      .getMessagingService(request.profileId)
+      .countMessages(request.entityPath, request.maxCount, request.fromSequenceNumber)
+  )
+
+  registerHandler('messages:countSubscription', (request) =>
+    connectionManager
+      .getMessagingService(request.profileId)
+      .countSubscriptionMessages(
+        request.topicName,
+        request.subscriptionName,
+        request.maxCount,
+        request.fromSequenceNumber
+      )
+  )
+
   registerHandler('messages:receive', (request) =>
     connectionManager
       .getMessagingService(request.profileId)
