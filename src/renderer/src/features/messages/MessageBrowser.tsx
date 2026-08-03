@@ -68,6 +68,10 @@ export function MessageBrowser({
   // case where paging forward with "Load more" is meaningful.
   const [canLoadMore, setCanLoadMore] = useState(false)
   const [filter, setFilter] = useState('')
+  const [sort, setSort] = useState<{ column: 'seq' | 'enqueued'; dir: 'asc' | 'desc' }>({
+    column: 'seq',
+    dir: 'asc'
+  })
   // Defaulted on, per the plan's "regenerate MessageId checkbox defaulted on" — reusing
   // the original id would look like a dupe of whatever's already at the destination if
   // duplicate detection is enabled there.
@@ -203,13 +207,35 @@ export function MessageBrowser({
   }
 
   const normalizedFilter = filter.trim().toLowerCase()
-  const visibleMessages = normalizedFilter
+  const filteredMessages = normalizedFilter
     ? messages.filter((message) =>
         [message.messageId, message.subject, message.correlationId, message.body]
           .filter((value): value is string => typeof value === 'string')
           .some((value) => value.toLowerCase().includes(normalizedFilter))
       )
     : messages
+
+  function sortValue(message: ReceivedMessageDescription): number {
+    return sort.column === 'seq'
+      ? message.sequenceNumber
+      : message.enqueuedTimeUtc
+        ? Date.parse(message.enqueuedTimeUtc)
+        : 0
+  }
+  const visibleMessages = [...filteredMessages].sort((a, b) => {
+    const diff = sortValue(a) - sortValue(b)
+    return sort.dir === 'asc' ? diff : -diff
+  })
+
+  function toggleSort(column: 'seq' | 'enqueued'): void {
+    setSort((prev) =>
+      prev.column === column
+        ? { column, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { column, dir: 'asc' }
+    )
+  }
+  const sortIndicator = (column: 'seq' | 'enqueued'): string =>
+    sort.column === column ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
 
   return (
     <div className="space-y-4">
@@ -295,9 +321,18 @@ export function MessageBrowser({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Seq</TableHead>
+            <TableHead>
+              <button type="button" className="font-medium" onClick={() => toggleSort('seq')}>
+                Seq{sortIndicator('seq')}
+              </button>
+            </TableHead>
             <TableHead>Label</TableHead>
             <TableHead>Correlation ID</TableHead>
+            <TableHead>
+              <button type="button" className="font-medium" onClick={() => toggleSort('enqueued')}>
+                Enqueued{sortIndicator('enqueued')}
+              </button>
+            </TableHead>
             <TableHead>Body preview</TableHead>
             {resubmitDestination && <TableHead>Dead-letter reason</TableHead>}
             <TableHead>Actions</TableHead>
@@ -309,6 +344,7 @@ export function MessageBrowser({
               <TableCell>{message.sequenceNumber}</TableCell>
               <TableCell>{message.subject}</TableCell>
               <TableCell>{message.correlationId}</TableCell>
+              <TableCell className="whitespace-nowrap">{message.enqueuedTimeUtc}</TableCell>
               <TableCell>{message.body.slice(0, 40)}</TableCell>
               {resubmitDestination && <TableCell>{message.deadLetterReason}</TableCell>}
               <TableCell>
@@ -416,6 +452,22 @@ export function MessageBrowser({
                 ) : (
                   <p className="text-muted-foreground text-sm">(none)</p>
                 )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigator.clipboard.writeText(selected.body)}
+                >
+                  Copy body
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigator.clipboard.writeText(JSON.stringify(selected, null, 2))}
+                >
+                  Copy as JSON
+                </Button>
               </div>
               <pre className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap">
                 {selected.body}

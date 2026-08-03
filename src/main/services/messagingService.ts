@@ -96,6 +96,11 @@ export class MessagingService {
         messageId: envelope.messageId || randomUUID(),
         replyTo: envelope.replyTo,
         timeToLive: envelope.timeToLive,
+        sessionId: envelope.sessionId,
+        scheduledEnqueueTimeUtc:
+          envelope.scheduledEnqueueTime !== undefined
+            ? new Date(envelope.scheduledEnqueueTime)
+            : undefined,
         applicationProperties: envelope.applicationProperties
       })
     } finally {

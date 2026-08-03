@@ -155,6 +155,11 @@ export interface MessageEnvelope {
   replyTo?: string
   /** Milliseconds. */
   timeToLive?: number
+  /** Session id — required for session-enabled entities; ignored otherwise. */
+  sessionId?: string
+  /** Epoch milliseconds. When set, the broker holds the message until this time before it
+   * becomes available (scheduled/delayed enqueue). */
+  scheduledEnqueueTime?: number
   applicationProperties?: Record<string, ApplicationPropertyValue>
 }
 

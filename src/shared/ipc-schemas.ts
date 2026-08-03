@@ -35,6 +35,8 @@ const messageEnvelope = z.object({
   messageId: z.string().optional(),
   replyTo: z.string().optional(),
   timeToLive: z.number().nonnegative().optional(),
+  sessionId: z.string().optional(),
+  scheduledEnqueueTime: z.number().int().nonnegative().optional(),
   applicationProperties: applicationProperties.optional()
 })
 

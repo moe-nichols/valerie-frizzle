@@ -239,6 +239,30 @@ describe("MessagingService — count methods", () => {
   });
 });
 
+describe("MessagingService — scheduled send", () => {
+  const scheduledQueueName = `test-scheduled-queue-${Date.now()}`;
+
+  beforeAll(async () => {
+    await adminService.createQueue({ name: scheduledQueueName });
+  });
+
+  afterAll(async () => {
+    await adminService.deleteQueue(scheduledQueueName);
+  });
+
+  test("a message scheduled for the future is enqueued (peekable) without error", async () => {
+    await messagingService.sendMessage(scheduledQueueName, {
+      body: "later",
+      bodyMode: "text",
+      messageId: "msg-scheduled-1",
+      scheduledEnqueueTime: Date.now() + 60_000,
+    });
+
+    const peeked = await messagingService.peekMessages(scheduledQueueName, 10, 0);
+    expect(peeked.find((m) => m.messageId === "msg-scheduled-1")).toBeDefined();
+  });
+});
+
 describe("MessagingService — receiveSubscriptionMessages", () => {
   // Its own topic/subscription so peekLock/DLQ state doesn't collide with other tests.
   const rxTopicName = `test-rx-topic-${Date.now()}`;
