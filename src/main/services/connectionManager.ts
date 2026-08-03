@@ -104,6 +104,12 @@ export class ConnectionManager {
   }
 
   async disconnect(profileId: string): Promise<void> {
+    // A disconnect (or the profile update/delete paths that call it) can race an in-flight
+    // connect. Wait for the attempt so its resources land in `active` and get torn down
+    // below, instead of no-opping and leaving the late-arriving connection running with
+    // no way to close it. A failed attempt cleans up after itself, so its rejection is
+    // irrelevant here.
+    await this.connecting.get(profileId)?.catch(() => {})
     const connection = this.active.get(profileId)
     if (!connection) return
     this.active.delete(profileId)
@@ -122,7 +128,8 @@ export class ConnectionManager {
   }
 
   async disconnectAll(): Promise<void> {
-    await Promise.all([...this.active.keys()].map((id) => this.disconnect(id)))
+    const ids = new Set([...this.active.keys(), ...this.connecting.keys()])
+    await Promise.all([...ids].map((id) => this.disconnect(id)))
   }
 
   getAdminClient(profileId: string): ServiceBusAdministrationClient {

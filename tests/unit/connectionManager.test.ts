@@ -148,6 +148,68 @@ describe('ConnectionManager.disconnect', () => {
     expect(manager.isConnected('p1')).toBe(false)
   })
 
+  test('disconnect during an in-flight connect waits for it and still tears it down', async () => {
+    // Gate the connect attempt mid-flight so disconnect races it deterministically.
+    let releaseConnect = (): void => {}
+    const gate = new Promise<void>((resolve) => {
+      releaseConnect = resolve
+    })
+    mocks.startAdminHttpsProxy.mockImplementation(async () => {
+      await gate
+      return { url: 'https://127.0.0.1:12345', caCert: 'cert', close: mocks.proxyClose }
+    })
+    const manager = new ConnectionManager(fakeProfilesRepo())
+
+    const connecting = manager.connect('p1')
+    const disconnecting = manager.disconnect('p1')
+    releaseConnect()
+    await Promise.all([connecting, disconnecting])
+
+    expect(manager.isConnected('p1')).toBe(false)
+    expect(mocks.sbClientClose).toHaveBeenCalledTimes(1)
+    expect(mocks.proxyClose).toHaveBeenCalledTimes(1)
+  })
+
+  test('disconnect during a failing connect resolves without stranding anything', async () => {
+    let releaseConnect = (): void => {}
+    const gate = new Promise<void>((resolve) => {
+      releaseConnect = resolve
+    })
+    mocks.startAdminHttpsProxy.mockImplementation(async () => {
+      await gate
+      throw new Error('bind failed')
+    })
+    const manager = new ConnectionManager(fakeProfilesRepo())
+
+    const connecting = manager.connect('p1')
+    const disconnecting = manager.disconnect('p1')
+    releaseConnect()
+    await expect(connecting).rejects.toThrow('could not connect to emulator')
+    await expect(disconnecting).resolves.toBeUndefined()
+
+    expect(manager.isConnected('p1')).toBe(false)
+  })
+
+  test('disconnectAll tears down profiles whose connects are still in flight', async () => {
+    let releaseConnect = (): void => {}
+    const gate = new Promise<void>((resolve) => {
+      releaseConnect = resolve
+    })
+    mocks.startAdminHttpsProxy.mockImplementation(async () => {
+      await gate
+      return { url: 'https://127.0.0.1:12345', caCert: 'cert', close: mocks.proxyClose }
+    })
+    const manager = new ConnectionManager(fakeProfilesRepo())
+
+    const connecting = manager.connect('p1')
+    const disconnectingAll = manager.disconnectAll()
+    releaseConnect()
+    await Promise.all([connecting, disconnectingAll])
+
+    expect(manager.isConnected('p1')).toBe(false)
+    expect(mocks.proxyClose).toHaveBeenCalledTimes(1)
+  })
+
   test("disconnectAll survives one profile's close failure and still closes the rest", async () => {
     mocks.sbClientClose.mockRejectedValueOnce(new Error('socket already destroyed'))
     const manager = new ConnectionManager(fakeProfilesRepo())
