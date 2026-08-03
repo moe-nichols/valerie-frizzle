@@ -96,6 +96,11 @@ export class MessagingService {
         messageId: envelope.messageId || randomUUID(),
         replyTo: envelope.replyTo,
         timeToLive: envelope.timeToLive,
+        sessionId: envelope.sessionId,
+        scheduledEnqueueTimeUtc:
+          envelope.scheduledEnqueueTime !== undefined
+            ? new Date(envelope.scheduledEnqueueTime)
+            : undefined,
         applicationProperties: envelope.applicationProperties
       })
     } finally {
@@ -124,15 +129,22 @@ export class MessagingService {
    * Peeking a subscription isn't just a queue peek with a different path — the SDK
    * addresses subscriptions via a distinct two-arg `createReceiver(topicName,
    * subscriptionName)` overload (confirmed by reading the SDK's type declarations),
-   * unlike a DLQ, which really is just a suffix on the same single-path call.
+   * unlike a queue DLQ, which really is just a suffix on the same single-path call. The
+   * subscription DLQ is reached by the same two-arg receiver plus `subQueueType`, not a
+   * path suffix — so it needs the `deadLetter` flag rather than a `buildDeadLetterQueuePath`.
    */
   async peekSubscriptionMessages(
     topicName: string,
     subscriptionName: string,
     maxCount: number,
-    fromSequenceNumber?: number
+    fromSequenceNumber?: number,
+    deadLetter = false
   ): Promise<ReceivedMessageDescription[]> {
-    const receiver = this.client.createReceiver(topicName, subscriptionName)
+    const receiver = this.client.createReceiver(
+      topicName,
+      subscriptionName,
+      deadLetter ? { subQueueType: 'deadLetter' } : undefined
+    )
     try {
       const messages = await receiver.peekMessages(maxCount, {
         fromSequenceNumber:
@@ -174,9 +186,14 @@ export class MessagingService {
     topicName: string,
     subscriptionName: string,
     maxCount: number,
-    fromSequenceNumber?: number
+    fromSequenceNumber?: number,
+    deadLetter = false
   ): Promise<number> {
-    const receiver = this.client.createReceiver(topicName, subscriptionName)
+    const receiver = this.client.createReceiver(
+      topicName,
+      subscriptionName,
+      deadLetter ? { subQueueType: 'deadLetter' } : undefined
+    )
     try {
       const messages = await receiver.peekMessages(maxCount, {
         fromSequenceNumber:
@@ -195,7 +212,39 @@ export class MessagingService {
     maxWaitTimeMs: number
   ): Promise<ReceivedMessageDescription[]> {
     const receiver = this.client.createReceiver(entityPath, { receiveMode: mode })
+    return this.drainReceiver(receiver, maxCount, mode, maxWaitTimeMs)
+  }
 
+  /**
+   * Subscription counterpart of {@link receiveMessages}. Addresses the subscription (or its
+   * DLQ) via the two-arg `createReceiver` overload, exactly as {@link peekSubscriptionMessages}
+   * does; the returned PeekLock handles settle through the same handle-based
+   * complete/abandon/deadLetter path, since settling is keyed on the receiver, not on how it
+   * was created.
+   */
+  async receiveSubscriptionMessages(
+    topicName: string,
+    subscriptionName: string,
+    maxCount: number,
+    mode: ReceiveMode,
+    maxWaitTimeMs: number,
+    deadLetter = false
+  ): Promise<ReceivedMessageDescription[]> {
+    const receiver = this.client.createReceiver(topicName, subscriptionName, {
+      receiveMode: mode,
+      ...(deadLetter ? { subQueueType: 'deadLetter' as const } : {})
+    })
+    return this.drainReceiver(receiver, maxCount, mode, maxWaitTimeMs)
+  }
+
+  /** Shared receive body for queues and subscriptions — the only thing that differs between
+   * them is how the receiver is created (single-path vs. two-arg overload). */
+  private async drainReceiver(
+    receiver: ServiceBusReceiver,
+    maxCount: number,
+    mode: ReceiveMode,
+    maxWaitTimeMs: number
+  ): Promise<ReceivedMessageDescription[]> {
     if (mode === 'receiveAndDelete') {
       try {
         const messages = await receiver.receiveMessages(maxCount, {

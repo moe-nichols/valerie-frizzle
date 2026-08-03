@@ -2,6 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger
+} from '@renderer/components/ui/collapsible'
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -10,6 +15,7 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
+import { emptyQueueFields, QueueFields, toCreateQueueInput } from './entityForms'
 
 interface CreateQueueDialogProps {
   profileId: string
@@ -25,16 +31,23 @@ export function CreateQueueDialog({
   onCreated
 }: CreateQueueDialogProps): React.JSX.Element {
   const [name, setName] = useState('')
+  const [fields, setFields] = useState(emptyQueueFields)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function resetForm(): void {
     setName('')
+    setFields(emptyQueueFields)
+    setAdvancedOpen(false)
     setError(null)
   }
 
   async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault()
-    const response = await window.sbAdmin.entities.queues.create(profileId, { name })
+    const response = await window.sbAdmin.entities.queues.create(
+      profileId,
+      toCreateQueueInput(name, fields)
+    )
     if (response.ok) {
       resetForm()
       onOpenChange(false)
@@ -52,7 +65,7 @@ export function CreateQueueDialog({
         onOpenChange(nextOpen)
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add queue</DialogTitle>
         </DialogHeader>
@@ -73,6 +86,18 @@ export function CreateQueueDialog({
               required
             />
           </div>
+
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" size="sm">
+                {advancedOpen ? 'Hide advanced' : 'Advanced…'}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              <QueueFields idPrefix="new-queue" mode="create" state={fields} onChange={setFields} />
+            </CollapsibleContent>
+          </Collapsible>
+
           <DialogFooter>
             <Button type="submit">Add queue</Button>
           </DialogFooter>

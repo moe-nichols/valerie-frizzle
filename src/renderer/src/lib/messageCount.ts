@@ -35,18 +35,30 @@ export async function fetchQueueMessageCount(
   return response.ok ? toResult(response.data) : null
 }
 
-/** Returns `null` on failure — callers should show nothing rather than a misleading zero. */
+/** Dead-letter counterpart of {@link fetchQueueMessageCount}; the queue DLQ is addressed by
+ * its path suffix (see `buildDeadLetterQueuePath`). */
+export async function fetchQueueDeadLetterCount(
+  profileId: string,
+  deadLetterEntityPath: string
+): Promise<MessageCountResult | null> {
+  return fetchQueueMessageCount(profileId, deadLetterEntityPath)
+}
+
+/** Returns `null` on failure — callers should show nothing rather than a misleading zero.
+ * Pass `deadLetter` to count the subscription's dead-letter sub-queue instead. */
 export async function fetchSubscriptionMessageCount(
   profileId: string,
   topicName: string,
-  subscriptionName: string
+  subscriptionName: string,
+  deadLetter = false
 ): Promise<MessageCountResult | null> {
   const response = await window.sbAdmin.messages.countSubscription(
     profileId,
     topicName,
     subscriptionName,
     PEEK_COUNT_CAP,
-    PEEK_FROM_START
+    PEEK_FROM_START,
+    deadLetter
   )
   return response.ok ? toResult(response.data) : null
 }

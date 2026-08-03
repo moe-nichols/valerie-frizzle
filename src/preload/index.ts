@@ -19,12 +19,17 @@ const api = {
   preferences: {
     getPollInterval: () => invoke('preferences:pollInterval:get', undefined),
     setPollInterval: (pollIntervalMs: number) =>
-      invoke('preferences:pollInterval:set', { pollIntervalMs })
+      invoke('preferences:pollInterval:set', { pollIntervalMs }),
+    getTheme: () => invoke('preferences:theme:get', undefined),
+    setTheme: (theme: IpcChannels['preferences:theme:set']['request']['theme']) =>
+      invoke('preferences:theme:set', { theme })
   },
   connections: {
     list: () => invoke('connections:list', undefined),
     create: (request: IpcChannels['connections:create']['request']) =>
       invoke('connections:create', request),
+    test: (request: IpcChannels['connections:test']['request']) =>
+      invoke('connections:test', request),
     update: (request: IpcChannels['connections:update']['request']) =>
       invoke('connections:update', request),
     delete: (id: string) => invoke('connections:delete', { id }),
@@ -89,6 +94,10 @@ const api = {
         profileId: string,
         input: IpcChannels['entities:rules:create']['request']['input']
       ) => invoke('entities:rules:create', { profileId, input }),
+      update: (
+        profileId: string,
+        input: IpcChannels['entities:rules:update']['request']['input']
+      ) => invoke('entities:rules:update', { profileId, input }),
       delete: (profileId: string, topicName: string, subscriptionName: string, name: string) =>
         invoke('entities:rules:delete', { profileId, topicName, subscriptionName, name })
     }
@@ -106,14 +115,16 @@ const api = {
       topicName: string,
       subscriptionName: string,
       maxCount: number,
-      fromSequenceNumber?: number
+      fromSequenceNumber?: number,
+      deadLetter?: boolean
     ) =>
       invoke('messages:peekSubscription', {
         profileId,
         topicName,
         subscriptionName,
         maxCount,
-        fromSequenceNumber
+        fromSequenceNumber,
+        deadLetter
       }),
     count: (profileId: string, entityPath: string, maxCount: number, fromSequenceNumber?: number) =>
       invoke('messages:count', { profileId, entityPath, maxCount, fromSequenceNumber }),
@@ -122,14 +133,16 @@ const api = {
       topicName: string,
       subscriptionName: string,
       maxCount: number,
-      fromSequenceNumber?: number
+      fromSequenceNumber?: number,
+      deadLetter?: boolean
     ) =>
       invoke('messages:countSubscription', {
         profileId,
         topicName,
         subscriptionName,
         maxCount,
-        fromSequenceNumber
+        fromSequenceNumber,
+        deadLetter
       }),
     receive: (
       profileId: string,
@@ -138,6 +151,24 @@ const api = {
       mode: IpcChannels['messages:receive']['request']['mode'],
       maxWaitTimeMs: number
     ) => invoke('messages:receive', { profileId, entityPath, maxCount, mode, maxWaitTimeMs }),
+    receiveSubscription: (
+      profileId: string,
+      topicName: string,
+      subscriptionName: string,
+      maxCount: number,
+      mode: IpcChannels['messages:receiveSubscription']['request']['mode'],
+      maxWaitTimeMs: number,
+      deadLetter?: boolean
+    ) =>
+      invoke('messages:receiveSubscription', {
+        profileId,
+        topicName,
+        subscriptionName,
+        maxCount,
+        mode,
+        maxWaitTimeMs,
+        deadLetter
+      }),
     complete: (profileId: string, handleId: string) =>
       invoke('messages:complete', { profileId, handleId }),
     abandon: (profileId: string, handleId: string) =>
