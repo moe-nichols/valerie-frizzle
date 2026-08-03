@@ -48,7 +48,24 @@ async function waitForManagementApiReady(timeoutMs = 90_000): Promise<void> {
   );
 }
 
+/** Fails fast with a clear message when no Docker CLI/daemon is available, instead of a
+ * raw spawn error surfacing minutes later inside a test hook timeout. */
+async function assertDockerAvailable(): Promise<void> {
+  const available = await new Promise<boolean>((resolve) => {
+    const proc = spawn("docker", ["info"], { stdio: "ignore" });
+    proc.on("error", () => resolve(false));
+    proc.on("exit", (code) => resolve(code === 0));
+  });
+  if (!available) {
+    throw new Error(
+      "Integration tests need Docker: the `docker` CLI is missing or the daemon is not " +
+        "running. Start Docker (or colima/OrbStack) and re-run `npm run test:integration`.",
+    );
+  }
+}
+
 export async function startEmulator(): Promise<void> {
+  await assertDockerAvailable();
   await run(["up", "-d"]);
   await waitForManagementApiReady();
 }

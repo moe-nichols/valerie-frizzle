@@ -4,6 +4,14 @@ import {
   type IpcChannels,
   type PurgeProgressEvent
 } from '@shared/ipc-contract'
+import { createPurgeProgressHub } from './purgeProgressHub'
+
+// One persistent listener feeds the hub so events arriving before the renderer subscribes
+// (purge:start resolves only after the drain has begun) are buffered instead of dropped.
+const purgeProgressHub = createPurgeProgressHub()
+ipcRenderer.on(PURGE_PROGRESS_CHANNEL, (_event, data: PurgeProgressEvent) => {
+  purgeProgressHub.deliver(data)
+})
 
 function invoke<K extends keyof IpcChannels>(
   channel: K,
@@ -149,13 +157,7 @@ const api = {
     onPurgeProgress: (
       jobId: string,
       callback: (event: PurgeProgressEvent) => void
-    ): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, data: PurgeProgressEvent): void => {
-        if (data.jobId === jobId) callback(data)
-      }
-      ipcRenderer.on(PURGE_PROGRESS_CHANNEL, listener)
-      return () => ipcRenderer.off(PURGE_PROGRESS_CHANNEL, listener)
-    },
+    ): (() => void) => purgeProgressHub.subscribe(jobId, callback),
     resubmit: (
       profileId: string,
       handleId: string,

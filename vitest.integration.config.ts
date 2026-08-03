@@ -12,5 +12,9 @@ export default defineConfig({
     globalSetup: "./tests/integration/globalSetup.ts",
     testTimeout: 30_000,
     hookTimeout: 120_000,
+    // All files share the one emulator started by globalSetup, and Service Bus peek
+    // cursors are global per entity — parallel workers stepping on each other is a real
+    // flakiness source, not a hypothetical.
+    fileParallelism: false,
   },
 });

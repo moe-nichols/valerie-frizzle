@@ -1,4 +1,5 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
+import { DEFAULT_POLL_INTERVAL_MS } from '@shared/pollInterval'
 
 interface SettingsState {
   // null until the initial load resolves, so usePolling correctly waits rather than
@@ -36,6 +37,11 @@ const settingsSlice = createSlice({
     builder
       .addCase(fetchPollInterval.fulfilled, (state, action) => {
         state.pollIntervalMs = action.payload
+      })
+      .addCase(fetchPollInterval.rejected, (state) => {
+        // null is the "still loading" sentinel that keeps usePolling idle; a failed load
+        // must not leave it there or the app silently never polls at all.
+        state.pollIntervalMs = DEFAULT_POLL_INTERVAL_MS
       })
       .addCase(updatePollInterval.fulfilled, (state, action) => {
         state.pollIntervalMs = action.payload

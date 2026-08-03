@@ -145,8 +145,19 @@ if (!gotSingleInstanceLock) {
   app.on('will-quit', async (event) => {
     event.preventDefault()
     log.info('app quitting')
-    await connectionManager.disconnectAll()
-    db.close()
-    app.exit()
+    // The app must always reach exit() — a cleanup failure can't be allowed to leave it
+    // un-quittable with preventDefault() already called.
+    try {
+      await connectionManager.disconnectAll()
+    } catch (err) {
+      log.error('error during shutdown cleanup', err)
+    } finally {
+      try {
+        db.close()
+      } catch (err) {
+        log.error('error closing database on shutdown', err)
+      }
+      app.exit()
+    }
   })
 }

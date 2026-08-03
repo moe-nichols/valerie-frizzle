@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
@@ -6,16 +6,11 @@ import { Button } from '@renderer/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
-import {
-  fetchSubscriptionMessageCount,
-  formatMessageCount,
-  type MessageCountResult
-} from '@renderer/lib/messageCount'
-import { useIsCurrent } from '@renderer/lib/useIsCurrent'
-import { usePolling } from '@renderer/lib/usePolling'
-import { useAppSelector } from '@renderer/store/hooks'
+import { fetchSubscriptionMessageCount, formatMessageCount } from '@renderer/lib/messageCount'
+import { useEntityCounts } from '@renderer/lib/useEntityCounts'
 import { MessageComposer } from '../messages/MessageComposer'
 import { SubscriptionRules } from './SubscriptionRules'
+import { useEntityPanel } from './useEntityPanel'
 
 interface TopicPanelProps {
   profileId: string
@@ -23,15 +18,26 @@ interface TopicPanelProps {
 }
 
 export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX.Element {
-  const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
   const [topic, setTopic] = useState<TopicDescription | null>(null)
   const [subscriptions, setSubscriptions] = useState<SubscriptionDescription[]>([])
-  const [subscriptionCounts, setSubscriptionCounts] = useState<Record<string, MessageCountResult>>(
-    {}
-  )
+  const {
+    counts: subscriptionCounts,
+    updateCounts: updateSubscriptionCounts,
+    resetCounts: resetSubscriptionCounts
+  } = useEntityCounts()
   const [error, setError] = useState<string | null>(null)
   const [newSubscriptionName, setNewSubscriptionName] = useState('')
-  const isCurrent = useIsCurrent(`${profileId}::${topicName}`)
+
+  const { isCurrent, refresh } = useEntityPanel(
+    `${profileId}::${topicName}`,
+    () => refreshAll(),
+    () => {
+      setTopic(null)
+      setSubscriptions([])
+      resetSubscriptionCounts()
+      setError(null)
+    }
+  )
 
   // The two refreshers report their error rather than writing shared `error` state
   // directly, so the combined refresh can set it once — otherwise one branch's success
@@ -51,28 +57,15 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     if (!response.ok) return response.error.message
     setSubscriptions(response.data)
 
-    const counts = await Promise.all(
-      response.data.map((subscription) =>
-        fetchSubscriptionMessageCount(profileId, topicName, subscription.subscriptionName)
-      )
+    await updateSubscriptionCounts(
+      response.data.map((subscription) => subscription.subscriptionName),
+      (name) => fetchSubscriptionMessageCount(profileId, topicName, name),
+      isCurrent
     )
-    if (!isCurrent()) return null
-    setSubscriptionCounts((prev) => {
-      const next: Record<string, MessageCountResult> = {}
-      response.data.forEach((subscription, index) => {
-        const count = counts[index]
-        if (count) {
-          next[subscription.subscriptionName] = count
-        } else if (prev[subscription.subscriptionName]) {
-          next[subscription.subscriptionName] = prev[subscription.subscriptionName]
-        }
-      })
-      return next
-    })
     return null
   }
 
-  async function refresh(): Promise<void> {
+  async function refreshAll(): Promise<void> {
     const [topicError, subscriptionError] = await Promise.all([
       refreshTopic(),
       refreshSubscriptions()
@@ -80,17 +73,6 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     if (!isCurrent()) return
     setError(topicError ?? subscriptionError)
   }
-
-  useEffect(() => {
-    setTopic(null)
-    setSubscriptions([])
-    setSubscriptionCounts({})
-    setError(null)
-    refresh()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileId, topicName])
-
-  usePolling(refresh, pollIntervalMs)
 
   async function handleCreateSubscription(event: FormEvent): Promise<void> {
     event.preventDefault()
@@ -100,7 +82,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     })
     if (response.ok) {
       setNewSubscriptionName('')
-      setError(await refreshSubscriptions())
+      await refresh()
     } else {
       setError(response.error.message)
     }
@@ -113,7 +95,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
       subscriptionName
     )
     if (response.ok) {
-      setError(await refreshSubscriptions())
+      await refresh()
     } else {
       setError(response.error.message)
     }
@@ -135,9 +117,15 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        {!topic && !error && <p className="text-muted-foreground text-sm">Loading…</p>}
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Send</h3>
-          <MessageComposer profileId={profileId} entityPath={topicName} />
+          {/* Keyed so a half-composed draft doesn't silently carry over to another entity. */}
+          <MessageComposer
+            key={`${profileId}::${topicName}`}
+            profileId={profileId}
+            entityPath={topicName}
+          />
         </div>
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Subscriptions</h3>

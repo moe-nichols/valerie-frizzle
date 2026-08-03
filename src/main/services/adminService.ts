@@ -119,6 +119,22 @@ async function runUpdateWithEmulatorParseWorkaround<T>(
   }
 }
 
+/** The fetch-merge-put-map cycle shared by every update method: the SDK requires the full
+ * properties object (fetch, mutate, put back) rather than a partial patch — see
+ * ServiceBusAdministrationClient.updateQueue's docs — and the put goes through the
+ * emulator PARSE_ERROR workaround above. */
+async function runMergedUpdate<TRaw, TOut>(
+  get: () => Promise<TRaw>,
+  put: (merged: TRaw) => Promise<TRaw>,
+  input: Partial<TRaw>,
+  toDescription: (raw: TRaw) => TOut
+): Promise<TOut> {
+  const existing = await get()
+  const merged = { ...existing, ...input }
+  const updated = await runUpdateWithEmulatorParseWorkaround(() => put(merged), get)
+  return toDescription(updated)
+}
+
 /**
  * No `getActiveMessageCount`/runtime-properties method here on purpose. The emulator's
  * GET-queue response has no `CountDetails`/`SizeInBytes`/`AccessedAt` at all (confirmed
@@ -155,15 +171,12 @@ export class AdminService {
   }
 
   async updateQueue(name: string, input: UpdateQueueInput): Promise<QueueDescription> {
-    // The SDK requires the full properties object (fetch, mutate, put back) rather
-    // than a partial patch — see ServiceBusAdministrationClient.updateQueue's docs.
-    const existing = await this.client.getQueue(name)
-    const merged = { ...existing, ...input }
-    const updated = await runUpdateWithEmulatorParseWorkaround(
-      () => this.client.updateQueue(merged),
-      () => this.client.getQueue(name)
+    return runMergedUpdate(
+      () => this.client.getQueue(name),
+      (merged) => this.client.updateQueue(merged),
+      input,
+      toQueueDescription
     )
-    return toQueueDescription(updated)
   }
 
   async deleteQueue(name: string): Promise<void> {
@@ -188,13 +201,12 @@ export class AdminService {
   }
 
   async updateTopic(name: string, input: UpdateTopicInput): Promise<TopicDescription> {
-    const existing = await this.client.getTopic(name)
-    const merged = { ...existing, ...input }
-    const updated = await runUpdateWithEmulatorParseWorkaround(
-      () => this.client.updateTopic(merged),
-      () => this.client.getTopic(name)
+    return runMergedUpdate(
+      () => this.client.getTopic(name),
+      (merged) => this.client.updateTopic(merged),
+      input,
+      toTopicDescription
     )
-    return toTopicDescription(updated)
   }
 
   async deleteTopic(name: string): Promise<void> {
@@ -225,13 +237,12 @@ export class AdminService {
     subscriptionName: string,
     input: UpdateSubscriptionInput
   ): Promise<SubscriptionDescription> {
-    const existing = await this.client.getSubscription(topicName, subscriptionName)
-    const merged = { ...existing, ...input }
-    const updated = await runUpdateWithEmulatorParseWorkaround(
-      () => this.client.updateSubscription(merged),
-      () => this.client.getSubscription(topicName, subscriptionName)
+    return runMergedUpdate(
+      () => this.client.getSubscription(topicName, subscriptionName),
+      (merged) => this.client.updateSubscription(merged),
+      input,
+      toSubscriptionDescription
     )
-    return toSubscriptionDescription(updated)
   }
 
   async deleteSubscription(topicName: string, subscriptionName: string): Promise<void> {

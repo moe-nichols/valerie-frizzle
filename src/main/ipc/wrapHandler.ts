@@ -1,7 +1,7 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import log from 'electron-log/main'
 import { ZodError, type ZodType } from 'zod'
-import type { Result } from '@shared/errors'
+import { AppError, type Result } from '@shared/errors'
 import type { IpcChannels } from '@shared/ipc-contract'
 import { ipcRequestSchemas } from '@shared/ipc-schemas'
 
@@ -15,18 +15,45 @@ export async function toResult<T>(fn: () => Promise<T> | T): Promise<Result<T>> 
   try {
     return { ok: true, data: await fn() }
   } catch (err) {
-    log.error(err instanceof Error ? err : new Error(String(err)))
+    logRedacted(err)
     if (err instanceof ZodError) {
       return {
         ok: false,
         error: { code: 'VALIDATION_ERROR', message: `invalid request: ${formatZodError(err)}` }
       }
     }
-    return {
-      ok: false,
-      error: { code: 'UNEXPECTED_ERROR', message: err instanceof Error ? err.message : String(err) }
+    if (err instanceof AppError) {
+      return { ok: false, error: { code: err.code, message: err.message } }
     }
+    const message = err instanceof Error ? err.message : String(err)
+    if (isEntityNotFoundError(err)) {
+      return { ok: false, error: { code: 'NOT_FOUND', message } }
+    }
+    return { ok: false, error: { code: 'UNEXPECTED_ERROR', message } }
   }
+}
+
+/** SDK connection failures can embed the full connection string (endpoint + SAS key) in
+ * their message; the key must not land in the on-disk log file even though it's an
+ * emulator-only dev credential. */
+function redactSecrets(text: string): string {
+  return text.replace(/SharedAccessKey=[^;\s'"]+/gi, 'SharedAccessKey=<redacted>')
+}
+
+function logRedacted(err: unknown): void {
+  if (err instanceof Error) {
+    log.error(`${err.name}: ${redactSecrets(err.message)}`, redactSecrets(err.stack ?? ''))
+  } else {
+    log.error(redactSecrets(String(err)))
+  }
+}
+
+/** Recognizes the SDK's two "it doesn't exist" shapes without importing their classes: a
+ * management RestError with HTTP 404, or a ServiceBusError coded MessagingEntityNotFound. */
+function isEntityNotFoundError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  const { statusCode, code } = err as { statusCode?: unknown; code?: unknown }
+  return statusCode === 404 || code === 'MessagingEntityNotFound'
 }
 
 function formatZodError(err: ZodError): string {
@@ -50,11 +77,14 @@ type ChannelHandler<K extends keyof IpcChannels> = (
 ) => Promise<ResponseData<K>> | ResponseData<K>
 
 /**
- * Registers an ipcMain handler for a channel with two guarantees baked in: the incoming
+ * Registers an ipcMain handler for a channel with three guarantees baked in: the incoming
  * payload is validated against the channel's zod schema before the handler runs (a bad
- * payload becomes a VALIDATION_ERROR Result, never an SDK call), and the handler's return
- * value / thrown error is funnelled through toResult. Handlers therefore deal only in
- * validated requests and plain return values.
+ * payload becomes a VALIDATION_ERROR Result, never an SDK call); the handler's return
+ * value / thrown error is funnelled through toResult, which preserves AppError codes and
+ * maps SDK not-found shapes so the renderer can react to *what* failed; and every failure
+ * is logged here (with connection-string secrets redacted) — the single logging choke
+ * point for the app. Handlers therefore deal only in validated requests and plain return
+ * values.
  */
 export function registerHandler<K extends keyof IpcChannels>(
   channel: K,

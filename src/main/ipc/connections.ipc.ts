@@ -10,8 +10,12 @@ export function registerConnectionsIpcHandlers(
 
   registerHandler('connections:create', (request) => profilesRepo.create(request))
 
-  registerHandler('connections:update', (request) => {
+  registerHandler('connections:update', async (request) => {
     const { id, ...input } = request
+    // An active connection was built from the old connection string/port; left in place it
+    // would keep serving the stale credentials and the edit would silently have no effect.
+    // Dropping it forces an explicit reconnect with the new values.
+    await connectionManager.disconnect(id)
     return profilesRepo.update(id, input)
   })
 

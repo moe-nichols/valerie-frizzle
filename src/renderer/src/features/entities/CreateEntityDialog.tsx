@@ -11,19 +11,21 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 
-interface CreateTopicDialogProps {
+interface CreateEntityDialogProps {
   profileId: string
+  entityKind: 'queue' | 'topic'
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated: () => void | Promise<void>
 }
 
-export function CreateTopicDialog({
+export function CreateEntityDialog({
   profileId,
+  entityKind,
   open,
   onOpenChange,
   onCreated
-}: CreateTopicDialogProps): React.JSX.Element {
+}: CreateEntityDialogProps): React.JSX.Element {
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -34,7 +36,10 @@ export function CreateTopicDialog({
 
   async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault()
-    const response = await window.sbAdmin.entities.topics.create(profileId, { name })
+    const response =
+      entityKind === 'queue'
+        ? await window.sbAdmin.entities.queues.create(profileId, { name })
+        : await window.sbAdmin.entities.topics.create(profileId, { name })
     if (response.ok) {
       resetForm()
       onOpenChange(false)
@@ -54,7 +59,7 @@ export function CreateTopicDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add topic</DialogTitle>
+          <DialogTitle>Add {entityKind}</DialogTitle>
         </DialogHeader>
 
         {error && (
@@ -65,16 +70,16 @@ export function CreateTopicDialog({
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="new-topic-name">Name</Label>
+            <Label htmlFor={`new-${entityKind}-name`}>Name</Label>
             <Input
-              id="new-topic-name"
+              id={`new-${entityKind}-name`}
               value={name}
               onChange={(event) => setName(event.target.value)}
               required
             />
           </div>
           <DialogFooter>
-            <Button type="submit">Add topic</Button>
+            <Button type="submit">Add {entityKind}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

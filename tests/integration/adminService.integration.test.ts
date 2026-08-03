@@ -1,8 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { ServiceBusAdministrationClient } from '@azure/service-bus'
-import { startAdminHttpsProxy, buildAdminConnectionString, type AdminHttpsProxy } from '../../src/main/services/adminHttpsProxy'
-import { AdminService } from '../../src/main/services/adminService'
-import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from './harness'
+import type { AdminService } from '../../src/main/services/adminService'
+import { connectToTestEmulator, type TestEmulatorClient } from './testClient'
 
 // Note: `maxSizeInMegabytes` is deliberately not asserted on anywhere in this file —
 // confirmed via direct investigation that the emulator ignores it at both create and
@@ -11,20 +9,16 @@ import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from './harnes
 // were both confirmed to apply correctly, so those are used instead to verify real
 // create/update semantics.
 
-let proxy: AdminHttpsProxy;
+let client: TestEmulatorClient;
 let adminService: AdminService;
 
 beforeAll(async () => {
-  proxy = await startAdminHttpsProxy(TEST_MANAGEMENT_PORT);
-  const adminConnectionString = buildAdminConnectionString(TEST_MESSAGING_CONNECTION_STRING, proxy.url);
-  const client = new ServiceBusAdministrationClient(adminConnectionString, {
-    tlsOptions: { ca: proxy.caCert },
-  });
-  adminService = new AdminService(client);
+  client = await connectToTestEmulator();
+  ({ adminService } = client);
 });
 
 afterAll(async () => {
-  await proxy.close();
+  await client.close();
 });
 
 describe("AdminService — queues", () => {

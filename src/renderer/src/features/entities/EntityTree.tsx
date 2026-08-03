@@ -26,21 +26,18 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem
 } from '@renderer/components/ui/sidebar'
-import {
-  fetchQueueMessageCount,
-  formatMessageCount,
-  type MessageCountResult
-} from '@renderer/lib/messageCount'
+import { fetchQueueMessageCount, formatMessageCount } from '@renderer/lib/messageCount'
+import { useEntityCounts } from '@renderer/lib/useEntityCounts'
 import { usePolling } from '@renderer/lib/usePolling'
 import {
+  entitiesRefreshed,
   queueDeleted,
   queueSelected,
   topicDeleted,
   topicSelected
 } from '@renderer/store/connectionsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
-import { CreateQueueDialog } from './CreateQueueDialog'
-import { CreateTopicDialog } from './CreateTopicDialog'
+import { CreateEntityDialog } from './CreateEntityDialog'
 
 interface EntityTreeProps {
   profileId: string
@@ -59,67 +56,61 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
 
   const [queues, setQueues] = useState<QueueDescription[]>([])
   const [topics, setTopics] = useState<TopicDescription[]>([])
-  const [queueCounts, setQueueCounts] = useState<Record<string, MessageCountResult>>({})
+  const { counts: queueCounts, updateCounts: updateQueueCounts } = useEntityCounts()
   const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
 
   const [createQueueOpen, setCreateQueueOpen] = useState(false)
   const [createTopicOpen, setCreateTopicOpen] = useState(false)
   const [deleting, setDeleting] = useState<DeletingEntity | null>(null)
 
-  async function refresh(): Promise<void> {
+  async function fetchEntities(): Promise<void> {
     const [queuesResponse, topicsResponse] = await Promise.all([
       window.sbAdmin.entities.queues.list(profileId),
       window.sbAdmin.entities.topics.list(profileId)
     ])
+    // The slice clears any active selection the fresh listings no longer contain (an
+    // entity deleted from outside this app must not keep a stale panel open).
+    dispatch(
+      entitiesRefreshed({
+        profileId,
+        queueNames: queuesResponse.ok
+          ? queuesResponse.data.map((queue) => queue.name)
+          : undefined,
+        topicNames: topicsResponse.ok
+          ? topicsResponse.data.map((topic) => topic.name)
+          : undefined
+      })
+    )
     // A single error is set at the end so one list's success doesn't wipe the other's
     // failure, and a fully successful poll clears a stale error from an earlier blip.
     let nextError: string | null = null
     if (queuesResponse.ok) {
-      // A queue/topic that disappeared server-side (deleted from outside this app, or by
-      // another connection to the same emulator) should stop being "active" here too — an
-      // open panel for it would otherwise keep showing stale data forever.
-      const newNames = new Set(queuesResponse.data.map((queue) => queue.name))
-      for (const queue of queues) {
-        if (!newNames.has(queue.name)) dispatch(queueDeleted(queue.name))
-      }
       setQueues(queuesResponse.data)
-
-      const counts = await Promise.all(
-        queuesResponse.data.map((queue) => fetchQueueMessageCount(profileId, queue.name))
+      await updateQueueCounts(
+        queuesResponse.data.map((queue) => queue.name),
+        (name) => fetchQueueMessageCount(profileId, name)
       )
-      setQueueCounts((prev) => {
-        const next: Record<string, MessageCountResult> = {}
-        queuesResponse.data.forEach((queue, index) => {
-          const count = counts[index]
-          if (count) {
-            next[queue.name] = count
-          } else if (prev[queue.name]) {
-            next[queue.name] = prev[queue.name]
-          }
-        })
-        return next
-      })
     } else {
       nextError = queuesResponse.error.message
     }
     if (topicsResponse.ok) {
-      const newNames = new Set(topicsResponse.data.map((topic) => topic.name))
-      for (const topic of topics) {
-        if (!newNames.has(topic.name)) dispatch(topicDeleted(topic.name))
-      }
       setTopics(topicsResponse.data)
     } else {
       nextError = nextError ?? topicsResponse.error.message
     }
     setError(nextError)
+    setLoaded(true)
   }
+
+  // All refreshes — timer ticks, the Refresh buttons, and post-create/delete reloads — go
+  // through this one guarded runner so they can't interleave and clobber newer state.
+  const refresh = usePolling(fetchEntities, pollIntervalMs)
 
   useEffect(() => {
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileId])
-
-  usePolling(refresh, pollIntervalMs)
 
   async function handleConfirmDelete(): Promise<void> {
     if (!deleting) return
@@ -132,7 +123,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         : await window.sbAdmin.entities.topics.delete(profileId, name)
 
     if (response.ok) {
-      dispatch(kind === 'queue' ? queueDeleted(name) : topicDeleted(name))
+      dispatch(kind === 'queue' ? queueDeleted({ profileId, name }) : topicDeleted({ profileId, name }))
       await refresh()
     } else {
       setError(response.error.message)
@@ -174,7 +165,9 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
           </div>
         </div>
         {queues.length === 0 && (
-          <p className="text-muted-foreground px-2 text-xs">No queues yet.</p>
+          <p className="text-muted-foreground px-2 text-xs">
+            {loaded ? 'No queues yet.' : 'Loading…'}
+          </p>
         )}
         {queues.map((queue) => (
           <SidebarMenuSubItem key={queue.name} className="flex items-center gap-1">
@@ -239,7 +232,9 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
           </div>
         </div>
         {topics.length === 0 && (
-          <p className="text-muted-foreground px-2 text-xs">No topics yet.</p>
+          <p className="text-muted-foreground px-2 text-xs">
+            {loaded ? 'No topics yet.' : 'Loading…'}
+          </p>
         )}
         {topics.map((topic) => (
           <SidebarMenuSubItem key={topic.name} className="flex items-center gap-1">
@@ -272,14 +267,16 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         ))}
       </SidebarMenuSub>
 
-      <CreateQueueDialog
+      <CreateEntityDialog
         profileId={profileId}
+        entityKind="queue"
         open={createQueueOpen}
         onOpenChange={setCreateQueueOpen}
         onCreated={refresh}
       />
-      <CreateTopicDialog
+      <CreateEntityDialog
         profileId={profileId}
+        entityKind="topic"
         open={createTopicOpen}
         onOpenChange={setCreateTopicOpen}
         onCreated={refresh}

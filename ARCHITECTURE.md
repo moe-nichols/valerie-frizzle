@@ -88,14 +88,24 @@ export interface IpcChannels {
   return value is wrapped in a `Result<T>` (`{ ok: true, data } | { ok: false, error }`) —
   handlers return plain data; nothing is ever allowed to throw across the IPC boundary,
   since Electron serializes thrown errors lossily (you lose the stack, sometimes the
-  message). Third, because this is the one place *every* real failure passes through, it's
-  where every error gets logged (`log.error()` via `electron-log`).
+  message). Errors carry a typed code (`IpcErrorCode` in `shared/errors.ts`): services
+  throw `AppError` with `NOT_CONNECTED`/`NOT_FOUND`/`PARTIAL_SUCCESS` where the failure is
+  meaningful to the UI (e.g. resubmit's partial success renders as "do NOT resubmit
+  again", not a generic failure), SDK not-found shapes are mapped to `NOT_FOUND`, and
+  anything else becomes `UNEXPECTED_ERROR`. Third, because this is the one place *every*
+  real failure passes through, it's where every error gets logged (`log.error()` via
+  `electron-log`, with `SharedAccessKey` values redacted before they can reach the
+  on-disk log file).
 - **Long-running operations use a start/subscribe pattern instead of blocking a single
   `invoke`.** Purging a large queue can take a while, so `messages:purge:start` returns
   immediately with a `jobId`; the main process pushes progress via
   `webContents.send(PURGE_PROGRESS_CHANNEL, { jobId, deletedCount, done })` as the drain
   loop runs, and preload exposes it as `window.sbAdmin.messages.onPurgeProgress(jobId,
-  callback)`, returning an unsubscribe function. This is the only push-event channel in
+  callback)`, returning an unsubscribe function. Because the drain starts before the
+  renderer can possibly subscribe (it needs the `jobId` from the invoke result first), the
+  preload buffers each job's events until its subscriber attaches
+  (`src/preload/purgeProgressHub.ts`) — without that, a fast purge's first events, or even
+  its terminal `done`, would be silently dropped. This is the only push-event channel in
   the app; if a second one is ever needed, it's worth generalizing the pattern rather
   than adding another one-off channel constant. (Queue/topic/message-count refreshing —
   see [Polling, not push](#polling-not-push) below — deliberately does *not* use this
@@ -191,7 +201,9 @@ src/renderer/src/
   lib/
     monaco.ts                      # Monaco worker setup, local-bundle loader config
     messageCount.ts                # shared peek-based count fetching (queues + subscriptions)
-    usePolling.ts                  # setInterval/cleanup hook, used by the tree + both panels
+    usePolling.ts                  # interval + guarded manual refresh (one in-flight guard for both)
+    useIsCurrent.ts                # stale-async-result predicate for the un-keyed panels
+    useEntityCounts.ts             # per-entity count map with keep-previous-on-failure merging
   store/
     store.ts, hooks.ts             # configureStore + typed useAppDispatch/useAppSelector
     connectionsSlice.ts            # selected profile/queue/topic, connected/connecting ids
@@ -202,7 +214,8 @@ src/renderer/src/
       AddConnectionDialog.tsx
     entities/
       EntityTree.tsx               # sidebar-nested queues/topics under the selected connection
-      CreateQueueDialog.tsx, CreateTopicDialog.tsx
+      CreateEntityDialog.tsx       # one parameterized add-queue/add-topic dialog
+      useEntityPanel.ts            # shared panel scaffolding: poll wiring + reset-on-selection-change
       QueuePanel.tsx               # queue detail: status, purge, send/browse/DLQ
       TopicPanel.tsx               # topic detail: status, send, subscriptions (+ their rules)
       SubscriptionRules.tsx        # per-subscription SQL/correlation rule CRUD
@@ -254,11 +267,11 @@ Two reasons this is simpler than a push channel:
   tree at once. `QueuePanel`/`TopicPanel` only exist (and thus only poll) while their
   entity is the one being viewed. There's no unbounded fan-out to push updates for.
 - **"Remove what's gone" falls out of the existing refresh for free.** `EntityTree`'s
-  `refresh()` already replaces its `queues`/`topics` state wholesale from the list
-  response; the only real addition is diffing the previous name set against the new one
-  and dispatching the existing `queueDeleted`/`topicDeleted` reducers for anything that
-  disappeared — which also closes an open panel for that entity automatically, since
-  those reducers already clear the active selection when it matches.
+  refresh replaces its `queues`/`topics` state wholesale from the list response and
+  dispatches `entitiesRefreshed` with the fresh name lists; the slice clears any active
+  selection the listing no longer contains (scoped to the reporting profile), which also
+  closes an open panel for that entity automatically. Keeping the rule in the slice means
+  the component never has to diff old state against new.
 
 Message counts are peek-based (see [Emulator quirks](#emulator-quirks-and-workarounds)
 below — there's no real count API), which means polling for counts **shares the same
@@ -271,6 +284,11 @@ cursor-based pagination today regardless (each "Peek" click just shows the lates
 from wherever the cursor is), so this isn't a regression so much as an existing quirk
 that polling now also participates in. Not solved here — worth knowing if it's ever
 surprising during a driven-UI check.
+
+One known cost: because there is no real count API, each poll tick issues one capped
+peek (up to 250 messages, main-process-side only) **per visible entity** — an N+1 burst
+that grows with the number of queues/subscriptions on screen. Fine at emulator scale;
+if it ever matters, batching or caching counts main-side is the place to fix it.
 
 ## Emulator quirks and workarounds
 
@@ -319,8 +337,10 @@ one location comes up empty, check the other.
 
 `electron-log` is initialized in `src/main/index.ts` with `{ preload: false }` —
 deliberately main-process-only. Every real failure in the app already flows through
-`toResult()` (see [The IPC contract](#the-ipc-contract) above), so that's the one place
-`log.error()` is called; there's no logging scattered through individual services.
+`toResult()` (see [The IPC contract](#the-ipc-contract) above), so that's the primary
+place `log.error()` is called (shutdown/disconnect cleanup warnings are the one other
+spot); `SharedAccessKey` values are redacted before anything is written, since SDK
+connection errors can embed the full connection string.
 Renderer-side logging was left out of scope on purpose — wiring electron-log's renderer
 transport means an *additional* preload script gets injected into every session
 alongside this app's own explicit `contextBridge` preload, which wasn't judged worth the
@@ -332,18 +352,25 @@ place that matters for a packaged build run with no attached terminal.
 
 Two tiers, deliberately kept separate:
 
-- **`npm run test:unit`** (`vitest.config.ts`, `tests/unit/**`) — pure-logic modules
-  only: filter/envelope/path-building helpers, `isPurgeComplete()`,
-  `buildResubmitEnvelope()`, `windowState.ts`'s and `pollPreference.ts`'s parse/clamp
-  functions, `ProfilesRepo` against a real temp SQLite file. No Docker, no live emulator,
-  runs in well under a second.
+- **`npm run test:unit`** (`vitest.config.ts`, `tests/unit/**`) — everything that runs
+  without Docker or Electron: pure helpers (filter/envelope/path-building,
+  `isPurgeComplete()`, `buildResubmitEnvelope()`, parse/clamp functions), `ProfilesRepo`
+  against a real temp SQLite file, the IPC choke point (`wrapHandler`/`toResult` with
+  `electron` mocked), the preload's purge-progress buffering hub, the Redux slices, and
+  the renderer's polling/staleness hooks (via `@testing-library/react` under jsdom).
+  Runs in about a second.
 - **`npm run test:integration`** (`vitest.integration.config.ts`, `tests/integration/**`)
-  — every service gets a companion `*.integration.test.ts` that runs its real operations
-  against a real emulator container and asserts on real results, never mocks. A Vitest
-  `globalSetup` (`tests/integration/globalSetup.ts` + `harness.ts`) starts a two-container
-  compose stack (`docker/servicebus-emulator/docker-compose.test.yml` — the emulator
-  needs a SQL Server metadata store, `sqledge`, alongside it) before the suite and tears
-  it down unconditionally afterward, including on failure.
+  — the emulator-facing services (`adminService`, `messagingService`, `purgeService`,
+  `replayService`, `connectionManager`) run their real operations against a real emulator
+  container and assert on real results, never mocks. (Pure-infrastructure modules —
+  `windowState`, `pollPreference`, the db layer — are covered at the unit tier instead.)
+  A Vitest `globalSetup` (`tests/integration/globalSetup.ts` + `harness.ts`) starts a
+  two-container compose stack (`docker/servicebus-emulator/docker-compose.test.yml` — the
+  emulator needs a SQL Server metadata store, `sqledge`, alongside it) before the suite
+  and tears it down unconditionally afterward, including on failure. Files run serially
+  (`fileParallelism: false`) because they share that one emulator and its global
+  per-entity peek cursors; per-suite client wiring is shared via
+  `tests/integration/testClient.ts`.
 
 This is the primary way correctness gets verified in this project — several real
 emulator bugs (see [Emulator quirks](#emulator-quirks-and-workarounds) above) were found
@@ -392,7 +419,9 @@ Beyond the Electron/Vite/React/TypeScript baseline, worth knowing *why* these ar
 - **Biome** — lint only (`formatter.enabled: false` in `biome.json`, so it never
   reformats existing code). Chosen over ESLint because this project runs TypeScript 7,
   which `typescript-eslint` doesn't yet support; Biome's parser is independent of the
-  installed TypeScript version.
+  installed TypeScript version. Note two deliberate relaxations in `biome.json`:
+  `a11y: none` (worth revisiting — the UI is built from accessible Radix primitives, but
+  nothing lints hand-written markup) and `noNonNullAssertion: off`.
 - **Vitest** — both test tiers (see [Testing strategy](#testing-strategy) above).
 - **`playwright-core`** — not a test runner here; used for the throwaway
   `_electron.launch()` driver scripts that actually click through the built app during

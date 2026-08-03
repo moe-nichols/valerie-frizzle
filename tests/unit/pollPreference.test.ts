@@ -20,9 +20,9 @@ describe('parsePollIntervalMs', () => {
     expect(parsePollIntervalMs('15000')).toBe(15000)
   })
 
-  test('falls back to the default when out of range', () => {
-    expect(parsePollIntervalMs(String(MIN_POLL_INTERVAL_MS - 1))).toBe(DEFAULT_POLL_INTERVAL_MS)
-    expect(parsePollIntervalMs(String(MAX_POLL_INTERVAL_MS + 1))).toBe(DEFAULT_POLL_INTERVAL_MS)
+  test('clamps out-of-range values to the nearest bound, matching save-side clamping', () => {
+    expect(parsePollIntervalMs(String(MIN_POLL_INTERVAL_MS - 1))).toBe(MIN_POLL_INTERVAL_MS)
+    expect(parsePollIntervalMs(String(MAX_POLL_INTERVAL_MS + 1))).toBe(MAX_POLL_INTERVAL_MS)
   })
 
   test('accepts the boundary values', () => {

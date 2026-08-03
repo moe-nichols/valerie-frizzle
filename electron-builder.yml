@@ -3,8 +3,13 @@ productName: SB Emulator Manager
 directories:
   output: dist
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
+  # `dir/**` (not `dir/*`) — the single-star form only excludes immediate children, which
+  # silently shipped all nested sources inside the packaged app.
+  - '!**/.vscode/**'
+  - '!src/**'
   - '!electron.vite.config.*'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-  - '!{docker,scripts,tests}/*'
+  - '!tsconfig*.json'
+  - '!vitest*.config.ts'
+  - '!biome.json'
+  - '!components.json'
+  - '!{docker,scripts,tests,plan}/**'

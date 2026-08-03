@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReceivedMessageDescription, ReceiveMode } from '@shared/domain'
-import { Alert, AlertDescription } from '@renderer/components/ui/alert'
+import type { IpcError, Result } from '@shared/errors'
+import { useIsCurrent } from '@renderer/lib/useIsCurrent'
+import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import {
@@ -20,6 +22,9 @@ import {
   TableRow
 } from '@renderer/components/ui/table'
 
+const PAGE_SIZE = 20
+const RECEIVE_WAIT_MS = 5000
+
 interface MessageBrowserProps {
   profileId: string
   entityPath: string
@@ -37,36 +42,49 @@ export function MessageBrowser({
 }: MessageBrowserProps): React.JSX.Element {
   const [messages, setMessages] = useState<ReceivedMessageDescription[]>([])
   const [mode, setMode] = useState<ReceiveMode>('peekLock')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<IpcError | null>(null)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<ReceivedMessageDescription | null>(null)
   // Defaulted on, per the plan's "regenerate MessageId checkbox defaulted on" — reusing
   // the original id would look like a dupe of whatever's already at the destination if
   // duplicate detection is enabled there.
   const [regenerateMessageId, setRegenerateMessageId] = useState(true)
+  const isCurrent = useIsCurrent(`${profileId}::${entityPath}`)
 
-  async function handlePeek(): Promise<void> {
+  // Loaded messages (and their PeekLock handles) belong to one entity on one connection —
+  // carrying them across a selection switch would let the settle buttons act on the wrong
+  // queue's handles under the new queue's header.
+  useEffect(() => {
+    setMessages([])
+    setSelected(null)
+    setError(null)
+    setLoading(false)
+  }, [profileId, entityPath])
+
+  async function loadMessages(
+    fetch: () => Promise<Awaited<ReturnType<typeof window.sbAdmin.messages.peek>>>
+  ): Promise<void> {
     setLoading(true)
     setError(null)
-    const response = await window.sbAdmin.messages.peek(profileId, entityPath, 20)
+    const response = await fetch()
+    // A slow load from a prior selection must not populate the entity now shown.
+    if (!isCurrent()) return
     setLoading(false)
     if (response.ok) {
       setMessages(response.data)
     } else {
-      setError(response.error.message)
+      setError(response.error)
     }
   }
 
+  async function handlePeek(): Promise<void> {
+    await loadMessages(() => window.sbAdmin.messages.peek(profileId, entityPath, PAGE_SIZE))
+  }
+
   async function handleReceive(): Promise<void> {
-    setLoading(true)
-    setError(null)
-    const response = await window.sbAdmin.messages.receive(profileId, entityPath, 20, mode, 5000)
-    setLoading(false)
-    if (response.ok) {
-      setMessages(response.data)
-    } else {
-      setError(response.error.message)
-    }
+    await loadMessages(() =>
+      window.sbAdmin.messages.receive(profileId, entityPath, PAGE_SIZE, mode, RECEIVE_WAIT_MS)
+    )
   }
 
   function removeMessage(handleId: string): void {
@@ -74,59 +92,57 @@ export function MessageBrowser({
     setSelected((prev) => (prev?.handleId === handleId ? null : prev))
   }
 
-  async function handleComplete(handleId: string): Promise<void> {
-    const response = await window.sbAdmin.messages.complete(profileId, handleId)
+  /** Runs a settle operation and, on success, drops the row and clears any prior error. */
+  async function settle(handleId: string, operation: () => Promise<Result<unknown>>): Promise<void> {
+    const response = await operation()
     if (response.ok) {
+      setError(null)
       removeMessage(handleId)
     } else {
-      setError(response.error.message)
+      setError(response.error)
+      // A partial success means the copy already landed at the destination — drop the row
+      // so the tempting "Resubmit" button can't be clicked again and double-deliver it.
+      if (response.error.code === 'PARTIAL_SUCCESS') {
+        removeMessage(handleId)
+      }
     }
+  }
+
+  async function handleComplete(handleId: string): Promise<void> {
+    await settle(handleId, () => window.sbAdmin.messages.complete(profileId, handleId))
   }
 
   async function handleAbandon(handleId: string): Promise<void> {
-    const response = await window.sbAdmin.messages.abandon(profileId, handleId)
-    if (response.ok) {
-      removeMessage(handleId)
-    } else {
-      setError(response.error.message)
-    }
+    await settle(handleId, () => window.sbAdmin.messages.abandon(profileId, handleId))
   }
 
   async function handleDeadLetter(handleId: string): Promise<void> {
-    const response = await window.sbAdmin.messages.deadLetter(
-      profileId,
-      handleId,
-      'manual',
-      'dead-lettered from the UI'
+    await settle(handleId, () =>
+      window.sbAdmin.messages.deadLetter(profileId, handleId, 'manual', 'dead-lettered from the UI')
     )
-    if (response.ok) {
-      removeMessage(handleId)
-    } else {
-      setError(response.error.message)
-    }
   }
 
   async function handleResubmit(message: ReceivedMessageDescription): Promise<void> {
     if (!resubmitDestination || !message.handleId) return
-    const response = await window.sbAdmin.messages.resubmit(
-      profileId,
-      message.handleId,
-      message,
-      resubmitDestination,
-      regenerateMessageId
+    await settle(message.handleId, () =>
+      window.sbAdmin.messages.resubmit(
+        profileId,
+        message.handleId as string,
+        message,
+        resubmitDestination,
+        regenerateMessageId
+      )
     )
-    if (response.ok) {
-      removeMessage(message.handleId)
-    } else {
-      setError(response.error.message)
-    }
   }
 
   return (
     <div className="space-y-4">
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+        <Alert variant={error.code === 'PARTIAL_SUCCESS' ? 'default' : 'destructive'}>
+          {error.code === 'PARTIAL_SUCCESS' && (
+            <AlertTitle>Resubmitted, but the original could not be removed</AlertTitle>
+          )}
+          <AlertDescription>{error.message}</AlertDescription>
         </Alert>
       )}
 

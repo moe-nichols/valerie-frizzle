@@ -1,4 +1,6 @@
 import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus'
+import log from 'electron-log/main'
+import { AppError } from '@shared/errors'
 import { startAdminHttpsProxy, buildAdminConnectionString, type AdminHttpsProxy } from './adminHttpsProxy'
 import { MessagingService } from './messagingService'
 import type { ProfilesRepo } from './db/profilesRepo'
@@ -41,7 +43,7 @@ export class ConnectionManager {
   private async doConnect(profileId: string): Promise<void> {
     const profile = this.profilesRepo.get(profileId)
     if (!profile) {
-      throw new Error(`profile not found: ${profileId}`)
+      throw new AppError('NOT_FOUND', `profile not found: ${profileId}`)
     }
 
     // Everything the attempt allocates is created inside this try, so any failure (a proxy
@@ -75,9 +77,18 @@ export class ConnectionManager {
     const connection = this.active.get(profileId)
     if (!connection) return
     this.active.delete(profileId)
-    await connection.messagingService.close()
-    await connection.sbClient.close()
-    await connection.adminProxy.close()
+    // Close independently: one close failing must not strand the others (the proxy holds
+    // a listening port), and disconnect must never reject or app shutdown could hang.
+    const results = await Promise.allSettled([
+      connection.messagingService.close(),
+      connection.sbClient.close(),
+      connection.adminProxy.close()
+    ])
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        log.warn(`error while disconnecting profile ${profileId}`, result.reason)
+      }
+    }
   }
 
   async disconnectAll(): Promise<void> {
@@ -87,7 +98,7 @@ export class ConnectionManager {
   getAdminClient(profileId: string): ServiceBusAdministrationClient {
     const connection = this.active.get(profileId)
     if (!connection) {
-      throw new Error(`profile is not connected: ${profileId}`)
+      throw new AppError('NOT_CONNECTED', `profile is not connected: ${profileId}`)
     }
     return connection.adminClient
   }
@@ -95,7 +106,7 @@ export class ConnectionManager {
   getMessagingService(profileId: string): MessagingService {
     const connection = this.active.get(profileId)
     if (!connection) {
-      throw new Error(`profile is not connected: ${profileId}`)
+      throw new AppError('NOT_CONNECTED', `profile is not connected: ${profileId}`)
     }
     return connection.messagingService
   }

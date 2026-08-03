@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { RuleDescription, RuleFilterInput } from '@shared/domain'
+import { usePolling } from '@renderer/lib/usePolling'
+import { useAppSelector } from '@renderer/store/hooks'
 import { Button } from '@renderer/components/ui/button'
 import {
   Collapsible,
@@ -41,6 +43,7 @@ export function SubscriptionRules({
   topicName,
   subscriptionName
 }: SubscriptionRulesProps): React.JSX.Element {
+  const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
   const [expanded, setExpanded] = useState(false)
   const [rules, setRules] = useState<RuleDescription[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -58,10 +61,15 @@ export function SubscriptionRules({
     const response = await window.sbAdmin.entities.rules.list(profileId, topicName, subscriptionName)
     if (response.ok) {
       setRules(response.data)
+      setError(null)
     } else {
       setError(response.error.message)
     }
   }
+
+  // Auto-refresh only while expanded, at the same cadence as the rest of the UI —
+  // a collapsed rules list has nothing on screen to go stale.
+  usePolling(refresh, expanded ? pollIntervalMs : null)
 
   async function handleToggle(): Promise<void> {
     const next = !expanded

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +44,26 @@ export function QueuePurgeControl({
   // "Dismiss" rather than automatically, avoids that class of bug.
   const [progress, setProgress] = useState<PurgeProgressState | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The active progress subscription, so it can be torn down on unmount or entity switch —
+  // subscribing without this leaked the ipcRenderer listener whenever a purge outlived the
+  // component (e.g. the profile was disconnected mid-purge).
+  const unsubscribeRef = useRef<(() => void) | null>(null)
+
+  function stopListening(): void {
+    unsubscribeRef.current?.()
+    unsubscribeRef.current = null
+  }
+
+  // A purge and its progress belong to one entity: switching entities mid-purge (the
+  // control is not keyed) must not show the old queue's progress against the new one.
+  useEffect(() => {
+    setConfirming(false)
+    setMessageCount(null)
+    setMessageCountIsApproximate(false)
+    setProgress(null)
+    setError(null)
+    return stopListening
+  }, [profileId, entityPath])
 
   async function handlePurgeClick(): Promise<void> {
     setError(null)
@@ -73,7 +93,8 @@ export function QueuePurgeControl({
       return
     }
 
-    const unsubscribe = window.sbAdmin.messages.onPurgeProgress(
+    stopListening()
+    unsubscribeRef.current = window.sbAdmin.messages.onPurgeProgress(
       startResponse.data.jobId,
       (event) => {
         setProgress({
@@ -85,7 +106,7 @@ export function QueuePurgeControl({
           setError(event.error)
         }
         if (event.done) {
-          unsubscribe()
+          stopListening()
         }
       }
     )

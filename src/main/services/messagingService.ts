@@ -11,6 +11,7 @@ import type {
   ReceiveMode,
   ApplicationPropertyValue
 } from '@shared/domain'
+import { AppError } from '@shared/errors'
 
 interface PeekLockHandle {
   message: ServiceBusReceivedMessage
@@ -103,21 +104,39 @@ export class MessagingService {
     }
   }
 
-  async peekMessages(
-    entityPath: string,
+  /** Opens a transient receiver, peeks up to `maxCount` (optionally from a cursor), maps
+   * the batch through `project`, and always closes the receiver. The four public
+   * peek/count methods differ only in how the receiver is addressed and what they
+   * project out of the batch. */
+  private async withPeekedBatch<T>(
+    createReceiver: () => ServiceBusReceiver,
     maxCount: number,
-    fromSequenceNumber?: number
-  ): Promise<ReceivedMessageDescription[]> {
-    const receiver = this.client.createReceiver(entityPath)
+    fromSequenceNumber: number | undefined,
+    project: (messages: ServiceBusReceivedMessage[]) => T
+  ): Promise<T> {
+    const receiver = createReceiver()
     try {
       const messages = await receiver.peekMessages(maxCount, {
         fromSequenceNumber:
           fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
       })
-      return messages.map((message) => toReceivedMessageDescription(message))
+      return project(messages)
     } finally {
       await receiver.close()
     }
+  }
+
+  async peekMessages(
+    entityPath: string,
+    maxCount: number,
+    fromSequenceNumber?: number
+  ): Promise<ReceivedMessageDescription[]> {
+    return this.withPeekedBatch(
+      () => this.client.createReceiver(entityPath),
+      maxCount,
+      fromSequenceNumber,
+      (messages) => messages.map((message) => toReceivedMessageDescription(message))
+    )
   }
 
   /**
@@ -132,16 +151,12 @@ export class MessagingService {
     maxCount: number,
     fromSequenceNumber?: number
   ): Promise<ReceivedMessageDescription[]> {
-    const receiver = this.client.createReceiver(topicName, subscriptionName)
-    try {
-      const messages = await receiver.peekMessages(maxCount, {
-        fromSequenceNumber:
-          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
-      })
-      return messages.map((message) => toReceivedMessageDescription(message))
-    } finally {
-      await receiver.close()
-    }
+    return this.withPeekedBatch(
+      () => this.client.createReceiver(topicName, subscriptionName),
+      maxCount,
+      fromSequenceNumber,
+      (messages) => messages.map((message) => toReceivedMessageDescription(message))
+    )
   }
 
   /**
@@ -156,16 +171,12 @@ export class MessagingService {
     maxCount: number,
     fromSequenceNumber?: number
   ): Promise<number> {
-    const receiver = this.client.createReceiver(entityPath)
-    try {
-      const messages = await receiver.peekMessages(maxCount, {
-        fromSequenceNumber:
-          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
-      })
-      return messages.length
-    } finally {
-      await receiver.close()
-    }
+    return this.withPeekedBatch(
+      () => this.client.createReceiver(entityPath),
+      maxCount,
+      fromSequenceNumber,
+      (messages) => messages.length
+    )
   }
 
   /** Subscription counterpart of {@link countMessages}; addresses the subscription via the
@@ -176,16 +187,12 @@ export class MessagingService {
     maxCount: number,
     fromSequenceNumber?: number
   ): Promise<number> {
-    const receiver = this.client.createReceiver(topicName, subscriptionName)
-    try {
-      const messages = await receiver.peekMessages(maxCount, {
-        fromSequenceNumber:
-          fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
-      })
-      return messages.length
-    } finally {
-      await receiver.close()
-    }
+    return this.withPeekedBatch(
+      () => this.client.createReceiver(topicName, subscriptionName),
+      maxCount,
+      fromSequenceNumber,
+      (messages) => messages.length
+    )
   }
 
   async receiveMessages(
@@ -239,7 +246,8 @@ export class MessagingService {
   ): Promise<void> {
     const handle = this.peekLockHandles.get(handleId)
     if (!handle) {
-      throw new Error(
+      throw new AppError(
+        'NOT_FOUND',
         `no such message handle (it may have already been settled, or its lock expired): ${handleId}`
       )
     }

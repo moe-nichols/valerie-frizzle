@@ -1,35 +1,26 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { ServiceBusAdministrationClient, ServiceBusClient } from '@azure/service-bus'
-import { startAdminHttpsProxy, buildAdminConnectionString, type AdminHttpsProxy } from '../../src/main/services/adminHttpsProxy'
-import { AdminService } from '../../src/main/services/adminService'
-import { MessagingService } from '../../src/main/services/messagingService'
+import type { AdminService } from '../../src/main/services/adminService'
+import type { MessagingService } from '../../src/main/services/messagingService'
 import { purgeEntity, type PurgeProgress } from '../../src/main/services/purgeService'
-import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from './harness'
+import { connectToTestEmulator, type TestEmulatorClient } from './testClient'
 
-let proxy: AdminHttpsProxy;
+let client: TestEmulatorClient;
 let adminService: AdminService;
-let sbClient: ServiceBusClient;
 let messagingService: MessagingService;
 const queueName = `test-purge-queue-${Date.now()}`;
 
 beforeAll(async () => {
-  proxy = await startAdminHttpsProxy(TEST_MANAGEMENT_PORT);
-  const adminConnectionString = buildAdminConnectionString(TEST_MESSAGING_CONNECTION_STRING, proxy.url);
-  const adminClient = new ServiceBusAdministrationClient(adminConnectionString, {
-    tlsOptions: { ca: proxy.caCert },
-  });
-  adminService = new AdminService(adminClient);
+  client = await connectToTestEmulator();
+  ({ adminService, messagingService } = client);
   await adminService.createQueue({ name: queueName });
-
-  sbClient = new ServiceBusClient(TEST_MESSAGING_CONNECTION_STRING);
-  messagingService = new MessagingService(sbClient);
 });
 
 afterAll(async () => {
+  // Release any open receivers before deleting the entities they point at; close() is
+  // idempotent, so client.close() calling it again is harmless.
   await messagingService.close();
-  await sbClient.close();
   await adminService.deleteQueue(queueName);
-  await proxy.close();
+  await client.close();
 });
 
 describe("purgeService", () => {

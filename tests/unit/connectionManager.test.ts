@@ -10,8 +10,13 @@ const mocks = vi.hoisted(() => {
     ServiceBusClient: vi.fn(),
     sbClientClose: vi.fn(async () => {}),
     ServiceBusAdministrationClient: vi.fn(),
+    messagingClose: vi.fn(async () => {}),
   };
 });
+
+vi.mock("electron-log/main", () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
 
 vi.mock("../../src/main/services/adminHttpsProxy.ts", () => ({
   startAdminHttpsProxy: mocks.startAdminHttpsProxy,
@@ -25,7 +30,7 @@ vi.mock("@azure/service-bus", () => ({
 
 vi.mock("../../src/main/services/messagingService.ts", () => ({
   MessagingService: class {
-    async close(): Promise<void> {}
+    close = mocks.messagingClose;
   },
 }));
 
@@ -112,5 +117,47 @@ describe("ConnectionManager.connect", () => {
     // Second attempt uses the healthy default mock and should succeed.
     await manager.connect("p1");
     expect(manager.isConnected("p1")).toBe(true);
+  });
+});
+
+describe("ConnectionManager.disconnect", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.startAdminHttpsProxy.mockImplementation(async () => ({
+      url: "https://127.0.0.1:12345",
+      caCert: "cert",
+      close: mocks.proxyClose,
+    }));
+    mocks.ServiceBusClient.mockImplementation(function () {
+      return { close: mocks.sbClientClose };
+    });
+    mocks.ServiceBusAdministrationClient.mockImplementation(function () {
+      return liveAdminClient();
+    });
+  });
+
+  test("a failing close does not strand the other resources or reject", async () => {
+    mocks.messagingClose.mockRejectedValueOnce(new Error("AMQP link torn down"));
+    const manager = new ConnectionManager(fakeProfilesRepo());
+    await manager.connect("p1");
+
+    await expect(manager.disconnect("p1")).resolves.toBeUndefined();
+
+    expect(mocks.sbClientClose).toHaveBeenCalledTimes(1);
+    expect(mocks.proxyClose).toHaveBeenCalledTimes(1);
+    expect(manager.isConnected("p1")).toBe(false);
+  });
+
+  test("disconnectAll survives one profile's close failure and still closes the rest", async () => {
+    mocks.sbClientClose.mockRejectedValueOnce(new Error("socket already destroyed"));
+    const manager = new ConnectionManager(fakeProfilesRepo());
+    await manager.connect("p1");
+    await manager.connect("p2");
+
+    await expect(manager.disconnectAll()).resolves.toBeUndefined();
+
+    expect(mocks.proxyClose).toHaveBeenCalledTimes(2);
+    expect(manager.isConnected("p1")).toBe(false);
+    expect(manager.isConnected("p2")).toBe(false);
   });
 });

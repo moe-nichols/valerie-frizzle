@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { QueueDescription } from '@shared/domain'
 import { buildDeadLetterQueuePath } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
@@ -9,12 +9,10 @@ import {
   formatMessageCount,
   type MessageCountResult
 } from '@renderer/lib/messageCount'
-import { useIsCurrent } from '@renderer/lib/useIsCurrent'
-import { usePolling } from '@renderer/lib/usePolling'
-import { useAppSelector } from '@renderer/store/hooks'
 import { MessageBrowser } from '../messages/MessageBrowser'
 import { MessageComposer } from '../messages/MessageComposer'
 import { QueuePurgeControl } from './QueuePurgeControl'
+import { useEntityPanel } from './useEntityPanel'
 
 interface QueuePanelProps {
   profileId: string
@@ -22,13 +20,21 @@ interface QueuePanelProps {
 }
 
 export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX.Element {
-  const pollIntervalMs = useAppSelector((state) => state.settings.pollIntervalMs)
   const [queue, setQueue] = useState<QueueDescription | null>(null)
   const [count, setCount] = useState<MessageCountResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const isCurrent = useIsCurrent(`${profileId}::${queueName}`)
 
-  async function refresh(): Promise<void> {
+  const { isCurrent } = useEntityPanel(
+    `${profileId}::${queueName}`,
+    () => fetchQueue(),
+    () => {
+      setQueue(null)
+      setCount(null)
+      setError(null)
+    }
+  )
+
+  async function fetchQueue(): Promise<void> {
     const [queueResponse, countResult] = await Promise.all([
       window.sbAdmin.entities.queues.get(profileId, queueName),
       fetchQueueMessageCount(profileId, queueName)
@@ -44,16 +50,6 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
     }
     if (countResult) setCount(countResult)
   }
-
-  useEffect(() => {
-    setQueue(null)
-    setCount(null)
-    setError(null)
-    refresh()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileId, queueName])
-
-  usePolling(refresh, pollIntervalMs)
 
   return (
     <Card>
@@ -75,9 +71,15 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        {!queue && !error && <p className="text-muted-foreground text-sm">Loading…</p>}
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Send</h3>
-          <MessageComposer profileId={profileId} entityPath={queueName} />
+          {/* Keyed so a half-composed draft doesn't silently carry over to another entity. */}
+          <MessageComposer
+            key={`${profileId}::${queueName}`}
+            profileId={profileId}
+            entityPath={queueName}
+          />
         </div>
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Browse</h3>

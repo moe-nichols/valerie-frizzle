@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Radio } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   Sidebar,
   SidebarContent,
@@ -25,6 +26,11 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     dispatch(fetchPollInterval())
+      .unwrap()
+      .catch((message: string) => {
+        // The slice already fell back to the default interval; this just tells the user.
+        toast.error(`Could not load the refresh-interval setting: ${message}. Using the default.`)
+      })
   }, [dispatch])
 
   return (
