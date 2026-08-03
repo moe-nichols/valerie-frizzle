@@ -1,15 +1,7 @@
-import { Alert, AlertDescription } from '@renderer/components/ui/alert'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from '@renderer/components/ui/dialog'
-import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
+import { FormDialog } from '@renderer/components/FormDialog'
 import type { QueueDescription, SubscriptionDescription, TopicDescription } from '@shared/domain'
-import { type FormEvent, useEffect, useState } from 'react'
+import type { Result } from '@shared/errors'
+import { useEffect, useState } from 'react'
 import {
   QueueFields,
   queueFieldsFromDescription,
@@ -23,194 +15,130 @@ import {
 } from './entityForms'
 
 /**
- * Edit dialogs wire the `entities.*.update` IPC channels — which existed but had no UI —
- * to the shared field groups from `entityForms`. Each resyncs its form from the current
- * entity description whenever it opens, so it reflects the persisted values rather than a
- * stale prior edit (same pattern as SettingsDialog).
+ * Edit dialogs wire the `entities.*.update` IPC channels to the shared field groups from
+ * `entityForms`. Each resyncs its form from the current entity description whenever it
+ * opens, so it reflects the persisted values rather than a stale prior edit (same pattern
+ * as SettingsDialog). The three exported dialogs are pure configuration over the generic
+ * EditEntityDialog below.
  */
 
-interface DialogShellProps {
-  title: string
+interface CommonEditProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  error: string | null
-  submitting: boolean
-  onSubmit: (event: FormEvent) => void
-  children: React.ReactNode
+  onUpdated: () => void | Promise<void>
 }
 
-function EditDialogShell({
+function EditEntityDialog<TDescription, TState>({
   title,
+  idPrefix,
+  description,
+  fieldsFromDescription,
+  Fields,
+  update,
   open,
   onOpenChange,
-  error,
-  submitting,
-  onSubmit,
-  children
-}: DialogShellProps): React.JSX.Element {
+  onUpdated
+}: CommonEditProps & {
+  title: string
+  idPrefix: string
+  description: TDescription
+  fieldsFromDescription: (description: TDescription) => TState
+  Fields: (props: {
+    idPrefix: string
+    mode: 'create' | 'edit'
+    state: TState
+    onChange: (next: TState) => void
+  }) => React.JSX.Element
+  update: (fields: TState) => Promise<Result<unknown>>
+}): React.JSX.Element {
+  const [fields, setFields] = useState<TState>(() => fieldsFromDescription(description))
+
+  useEffect(() => {
+    if (open) setFields(fieldsFromDescription(description))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, description])
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        <form onSubmit={onSubmit} className="space-y-3">
-          {children}
-          <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <FormDialog
+      title={title}
+      open={open}
+      onOpenChange={onOpenChange}
+      submitLabel="Save"
+      action={() => update(fields)}
+      onSuccess={async () => {
+        onOpenChange(false)
+        await onUpdated()
+      }}
+    >
+      <Fields idPrefix={idPrefix} mode="edit" state={fields} onChange={setFields} />
+    </FormDialog>
   )
 }
 
 export function EditQueueDialog({
   profileId,
   queue,
-  open,
-  onOpenChange,
-  onUpdated
-}: {
-  profileId: string
-  queue: QueueDescription
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onUpdated: () => void | Promise<void>
-}): React.JSX.Element {
-  const [fields, setFields] = useState(() => queueFieldsFromDescription(queue))
-  const { submit, submitting, error, reset } = useAsyncSubmit(
-    () => window.sbAdmin.entities.queues.update(profileId, queue.name, toUpdateQueueInput(fields)),
-    async () => {
-      onOpenChange(false)
-      await onUpdated()
-    }
-  )
-
-  useEffect(() => {
-    if (open) {
-      setFields(queueFieldsFromDescription(queue))
-      reset()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, queue])
-
+  ...common
+}: CommonEditProps & { profileId: string; queue: QueueDescription }): React.JSX.Element {
   return (
-    <EditDialogShell
+    <EditEntityDialog
       title={`Edit queue — ${queue.name}`}
-      open={open}
-      onOpenChange={onOpenChange}
-      error={error}
-      submitting={submitting}
-      onSubmit={submit}
-    >
-      <QueueFields idPrefix="edit-queue" mode="edit" state={fields} onChange={setFields} />
-    </EditDialogShell>
+      idPrefix="edit-queue"
+      description={queue}
+      fieldsFromDescription={queueFieldsFromDescription}
+      Fields={QueueFields}
+      update={(fields) =>
+        window.sbAdmin.entities.queues.update(profileId, queue.name, toUpdateQueueInput(fields))
+      }
+      {...common}
+    />
   )
 }
 
 export function EditTopicDialog({
   profileId,
   topic,
-  open,
-  onOpenChange,
-  onUpdated
-}: {
-  profileId: string
-  topic: TopicDescription
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onUpdated: () => void | Promise<void>
-}): React.JSX.Element {
-  const [fields, setFields] = useState(() => topicFieldsFromDescription(topic))
-  const { submit, submitting, error, reset } = useAsyncSubmit(
-    () => window.sbAdmin.entities.topics.update(profileId, topic.name, toUpdateTopicInput(fields)),
-    async () => {
-      onOpenChange(false)
-      await onUpdated()
-    }
-  )
-
-  useEffect(() => {
-    if (open) {
-      setFields(topicFieldsFromDescription(topic))
-      reset()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, topic])
-
+  ...common
+}: CommonEditProps & { profileId: string; topic: TopicDescription }): React.JSX.Element {
   return (
-    <EditDialogShell
+    <EditEntityDialog
       title={`Edit topic — ${topic.name}`}
-      open={open}
-      onOpenChange={onOpenChange}
-      error={error}
-      submitting={submitting}
-      onSubmit={submit}
-    >
-      <TopicFields idPrefix="edit-topic" mode="edit" state={fields} onChange={setFields} />
-    </EditDialogShell>
+      idPrefix="edit-topic"
+      description={topic}
+      fieldsFromDescription={topicFieldsFromDescription}
+      Fields={TopicFields}
+      update={(fields) =>
+        window.sbAdmin.entities.topics.update(profileId, topic.name, toUpdateTopicInput(fields))
+      }
+      {...common}
+    />
   )
 }
 
 export function EditSubscriptionDialog({
   profileId,
   subscription,
-  open,
-  onOpenChange,
-  onUpdated
-}: {
+  ...common
+}: CommonEditProps & {
   profileId: string
   subscription: SubscriptionDescription
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onUpdated: () => void | Promise<void>
 }): React.JSX.Element {
-  const [fields, setFields] = useState(() => subscriptionFieldsFromDescription(subscription))
-  const { submit, submitting, error, reset } = useAsyncSubmit(
-    () =>
-      window.sbAdmin.entities.subscriptions.update(
-        profileId,
-        subscription.topicName,
-        subscription.subscriptionName,
-        toUpdateSubscriptionInput(fields)
-      ),
-    async () => {
-      onOpenChange(false)
-      await onUpdated()
-    }
-  )
-
-  useEffect(() => {
-    if (open) {
-      setFields(subscriptionFieldsFromDescription(subscription))
-      reset()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, subscription])
-
   return (
-    <EditDialogShell
+    <EditEntityDialog
       title={`Edit subscription — ${subscription.subscriptionName}`}
-      open={open}
-      onOpenChange={onOpenChange}
-      error={error}
-      submitting={submitting}
-      onSubmit={submit}
-    >
-      <SubscriptionFields
-        idPrefix="edit-subscription"
-        mode="edit"
-        state={fields}
-        onChange={setFields}
-      />
-    </EditDialogShell>
+      idPrefix="edit-subscription"
+      description={subscription}
+      fieldsFromDescription={subscriptionFieldsFromDescription}
+      Fields={SubscriptionFields}
+      update={(fields) =>
+        window.sbAdmin.entities.subscriptions.update(
+          profileId,
+          subscription.topicName,
+          subscription.subscriptionName,
+          toUpdateSubscriptionInput(fields)
+        )
+      }
+      {...common}
+    />
   )
 }
