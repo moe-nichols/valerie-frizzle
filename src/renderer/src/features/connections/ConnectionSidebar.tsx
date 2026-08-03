@@ -29,6 +29,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem
 } from '@renderer/components/ui/sidebar'
+import { EntityTree } from '@renderer/features/entities/EntityTree'
 import {
   deleteProfile,
   disconnectProfile,
@@ -157,6 +158,7 @@ export function ConnectionSidebar(): React.JSX.Element {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  {profile.id === selectedProfileId && <EntityTree profileId={profile.id} />}
                 </SidebarMenuItem>
               )
             })}
