@@ -1,20 +1,5 @@
 import { ConfirmDialog, permanentRemovalDescription } from '@renderer/components/ConfirmDialog'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
-import { Badge } from '@renderer/components/ui/badge'
-import { Button } from '@renderer/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@renderer/components/ui/dropdown-menu'
-import {
-  SidebarGroupLabel,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem
-} from '@renderer/components/ui/sidebar'
-import { formatMessageCount } from '@renderer/lib/messageCount'
 import {
   queueDeleted,
   queueSelected,
@@ -23,10 +8,11 @@ import {
 } from '@renderer/store/connectionsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 import type { QueueDescription, TopicDescription } from '@shared/domain'
-import { MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { CreateQueueDialog, CreateTopicDialog } from './CreateEntityDialog'
 import { EditQueueDialog, EditTopicDialog } from './EditEntityDialogs'
+import { EntityCountBadges } from './EntityCountBadges'
+import { EntityTreeSection } from './EntityTreeSection'
 import { useEntityTreeData } from './useEntityTreeData'
 
 interface EntityTreeProps {
@@ -80,141 +66,39 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         </Alert>
       )}
 
-      <SidebarMenuSub className="border-l-0 px-0">
-        <div className="flex items-center justify-between px-2">
-          <SidebarGroupLabel className="p-0">Queues</SidebarGroupLabel>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-5"
-              title="Refresh now"
-              onClick={() => refresh()}
-            >
-              <RefreshCw />
-              <span className="sr-only">Refresh now</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-5"
-              title="Add queue"
-              onClick={() => setCreateQueueOpen(true)}
-            >
-              <Plus />
-              <span className="sr-only">Add queue</span>
-            </Button>
-          </div>
-        </div>
-        {queues.length === 0 && (
-          <p className="text-muted-foreground px-2 text-xs">
-            {loaded ? 'No queues yet.' : 'Loading…'}
-          </p>
+      <EntityTreeSection
+        label="Queues"
+        addLabel="Add queue"
+        entities={queues}
+        loaded={loaded}
+        emptyText="No queues yet."
+        activeName={activeQueueName}
+        onSelect={(queue) => dispatch(queueSelected(queue.name))}
+        onRefresh={() => refresh()}
+        onAdd={() => setCreateQueueOpen(true)}
+        onEdit={setEditingQueue}
+        onDelete={(queue) => setDeleting({ kind: 'queue', name: queue.name })}
+        renderBadges={(queue) => (
+          <EntityCountBadges
+            active={queueCounts[queue.name]}
+            deadLetter={queueDlqCounts[queue.name]}
+          />
         )}
-        {queues.map((queue) => (
-          <SidebarMenuSubItem key={queue.name} className="flex items-center gap-1">
-            <SidebarMenuSubButton
-              asChild
-              isActive={activeQueueName === queue.name}
-              className="flex-1"
-            >
-              <button type="button" onClick={() => dispatch(queueSelected(queue.name))}>
-                <span className="truncate">{queue.name}</span>
-              </button>
-            </SidebarMenuSubButton>
-            {queueCounts[queue.name] && (
-              <Badge variant="secondary" className="shrink-0">
-                {formatMessageCount(queueCounts[queue.name])}
-              </Badge>
-            )}
-            {queueDlqCounts[queue.name] && queueDlqCounts[queue.name].count > 0 && (
-              <Badge variant="destructive" className="shrink-0" title="Dead-lettered messages">
-                {formatMessageCount(queueDlqCounts[queue.name])} DLQ
-              </Badge>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-5 shrink-0">
-                  <MoreHorizontal />
-                  <span className="sr-only">More</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" align="start">
-                <DropdownMenuItem onClick={() => setEditingQueue(queue)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => setDeleting({ kind: 'queue', name: queue.name })}
-                >
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarMenuSubItem>
-        ))}
-      </SidebarMenuSub>
+      />
 
-      <SidebarMenuSub className="border-l-0 px-0">
-        <div className="flex items-center justify-between px-2">
-          <SidebarGroupLabel className="p-0">Topics</SidebarGroupLabel>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-5"
-              title="Refresh now"
-              onClick={() => refresh()}
-            >
-              <RefreshCw />
-              <span className="sr-only">Refresh now</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-5"
-              title="Add topic"
-              onClick={() => setCreateTopicOpen(true)}
-            >
-              <Plus />
-              <span className="sr-only">Add topic</span>
-            </Button>
-          </div>
-        </div>
-        {topics.length === 0 && (
-          <p className="text-muted-foreground px-2 text-xs">
-            {loaded ? 'No topics yet.' : 'Loading…'}
-          </p>
-        )}
-        {topics.map((topic) => (
-          <SidebarMenuSubItem key={topic.name} className="flex items-center gap-1">
-            <SidebarMenuSubButton
-              asChild
-              isActive={activeTopicName === topic.name}
-              className="flex-1"
-            >
-              <button type="button" onClick={() => dispatch(topicSelected(topic.name))}>
-                <span className="truncate">{topic.name}</span>
-              </button>
-            </SidebarMenuSubButton>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-5 shrink-0">
-                  <MoreHorizontal />
-                  <span className="sr-only">More</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" align="start">
-                <DropdownMenuItem onClick={() => setEditingTopic(topic)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => setDeleting({ kind: 'topic', name: topic.name })}
-                >
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarMenuSubItem>
-        ))}
-      </SidebarMenuSub>
+      <EntityTreeSection
+        label="Topics"
+        addLabel="Add topic"
+        entities={topics}
+        loaded={loaded}
+        emptyText="No topics yet."
+        activeName={activeTopicName}
+        onSelect={(topic) => dispatch(topicSelected(topic.name))}
+        onRefresh={() => refresh()}
+        onAdd={() => setCreateTopicOpen(true)}
+        onEdit={setEditingTopic}
+        onDelete={(topic) => setDeleting({ kind: 'topic', name: topic.name })}
+      />
 
       <CreateQueueDialog
         profileId={profileId}
