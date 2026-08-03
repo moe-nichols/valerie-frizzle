@@ -51,7 +51,13 @@ export function ConnectionSidebar(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    dispatch(fetchProfiles())
+    async function load(): Promise<void> {
+      const result = await dispatch(fetchProfiles())
+      if (fetchProfiles.rejected.match(result)) {
+        setError(result.payload ?? 'Failed to load connection profiles')
+      }
+    }
+    load()
   }, [dispatch])
 
   async function handleSelect(id: string): Promise<void> {

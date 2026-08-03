@@ -7,6 +7,7 @@ interface ConnectionsState {
   connectingIds: string[]
   selectedProfileId: string | null
   activeQueueName: string | null
+  activeTopicName: string | null
 }
 
 const initialState: ConnectionsState = {
@@ -14,7 +15,8 @@ const initialState: ConnectionsState = {
   connectedIds: [],
   connectingIds: [],
   selectedProfileId: null,
-  activeQueueName: null
+  activeQueueName: null,
+  activeTopicName: null
 }
 
 function without(ids: string[], id: string): string[] {
@@ -83,13 +85,24 @@ const connectionsSlice = createSlice({
     profileSelected(state, action: PayloadAction<string>) {
       state.selectedProfileId = action.payload
       state.activeQueueName = null
+      state.activeTopicName = null
     },
     queueSelected(state, action: PayloadAction<string>) {
       state.activeQueueName = action.payload
+      state.activeTopicName = null
     },
     queueDeleted(state, action: PayloadAction<string>) {
       if (state.activeQueueName === action.payload) {
         state.activeQueueName = null
+      }
+    },
+    topicSelected(state, action: PayloadAction<string>) {
+      state.activeTopicName = action.payload
+      state.activeQueueName = null
+    },
+    topicDeleted(state, action: PayloadAction<string>) {
+      if (state.activeTopicName === action.payload) {
+        state.activeTopicName = null
       }
     }
   },
@@ -109,6 +122,7 @@ const connectionsSlice = createSlice({
         state.connectedIds.push(action.payload)
         state.selectedProfileId = action.payload
         state.activeQueueName = null
+        state.activeTopicName = null
       })
       .addCase(selectProfile.rejected, (state, action) => {
         state.connectingIds = without(state.connectingIds, action.meta.arg)
@@ -118,6 +132,7 @@ const connectionsSlice = createSlice({
         if (state.selectedProfileId === action.payload) {
           state.selectedProfileId = null
           state.activeQueueName = null
+          state.activeTopicName = null
         }
       })
       .addCase(deleteProfile.fulfilled, (state, action) => {
@@ -126,10 +141,12 @@ const connectionsSlice = createSlice({
         if (state.selectedProfileId === action.payload) {
           state.selectedProfileId = null
           state.activeQueueName = null
+          state.activeTopicName = null
         }
       })
   }
 })
 
-export const { profileSelected, queueSelected, queueDeleted } = connectionsSlice.actions
+export const { profileSelected, queueSelected, queueDeleted, topicSelected, topicDeleted } =
+  connectionsSlice.actions
 export const connectionsReducer = connectionsSlice.reducer

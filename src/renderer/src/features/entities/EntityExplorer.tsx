@@ -11,7 +11,12 @@ import {
 } from '@renderer/components/ui/collapsible'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
-import { queueDeleted, queueSelected } from '@renderer/store/connectionsSlice'
+import {
+  queueDeleted,
+  queueSelected,
+  topicDeleted,
+  topicSelected
+} from '@renderer/store/connectionsSlice'
 import { useAppDispatch } from '@renderer/store/hooks'
 
 interface EntityExplorerProps {
@@ -131,6 +136,7 @@ export function EntityExplorer({ profileId }: EntityExplorerProps): React.JSX.El
     if (!profileId) return
     const response = await window.sbAdmin.entities.topics.delete(profileId, name)
     if (response.ok) {
+      dispatch(topicDeleted(name))
       await refresh(profileId)
     } else {
       setError(response.error.message)
@@ -247,6 +253,13 @@ export function EntityExplorer({ profileId }: EntityExplorerProps): React.JSX.El
                   ({topic.status}, max {topic.maxSizeInMegabytes}MB)
                 </span>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => dispatch(topicSelected(topic.name))}
+              >
+                Send messages
+              </Button>
               {/* A direct child <button> of this <li>, not nested in a wrapper div — a driver
                   script locator pattern (see plan/PROGRESS.md finding #5) scopes to this exact
                   shape (`topicRow.locator(':scope > button:has-text("Delete")')`) to disambiguate

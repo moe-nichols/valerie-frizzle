@@ -20,6 +20,7 @@ import { useAppSelector } from './store/hooks'
 function App(): React.JSX.Element {
   const selectedProfileId = useAppSelector((state) => state.connections.selectedProfileId)
   const activeQueueName = useAppSelector((state) => state.connections.activeQueueName)
+  const activeTopicName = useAppSelector((state) => state.connections.activeTopicName)
 
   return (
     <SidebarProvider>
@@ -82,6 +83,20 @@ function App(): React.JSX.Element {
                         entityPath={buildDeadLetterQueuePath(activeQueueName)}
                         resubmitDestination={activeQueueName}
                       />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTopicName && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Messages — {activeTopicName}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-3">
+                      <h3 className="text-lg font-medium">Send</h3>
+                      <MessageComposer profileId={selectedProfileId} entityPath={activeTopicName} />
                     </div>
                   </CardContent>
                 </Card>
