@@ -144,6 +144,10 @@ export const ipcRequestSchemas: {
     connectionString: nonEmptyString,
     managementPort: port
   }),
+  'connections:test': z.object({
+    connectionString: nonEmptyString,
+    managementPort: port
+  }),
   'connections:update': z.object({
     id: nonEmptyString,
     name: nonEmptyString.optional(),

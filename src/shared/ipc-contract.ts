@@ -39,6 +39,10 @@ export interface IpcChannels {
     request: { name: string; connectionString: string; managementPort: number }
     response: Result<ConnectionProfile>
   }
+  'connections:test': {
+    request: { connectionString: string; managementPort: number }
+    response: Result<undefined>
+  }
   'connections:update': {
     request: {
       id: string

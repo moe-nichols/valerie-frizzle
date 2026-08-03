@@ -10,6 +10,11 @@ export function registerConnectionsIpcHandlers(
 
   registerHandler('connections:create', (request) => profilesRepo.create(request))
 
+  registerHandler('connections:test', async (request) => {
+    await connectionManager.testConnection(request.connectionString, request.managementPort)
+    return undefined
+  })
+
   registerHandler('connections:update', (request) => {
     const { id, ...input } = request
     return profilesRepo.update(id, input)

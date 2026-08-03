@@ -25,6 +25,8 @@ const api = {
     list: () => invoke('connections:list', undefined),
     create: (request: IpcChannels['connections:create']['request']) =>
       invoke('connections:create', request),
+    test: (request: IpcChannels['connections:test']['request']) =>
+      invoke('connections:test', request),
     update: (request: IpcChannels['connections:update']['request']) =>
       invoke('connections:update', request),
     delete: (id: string) => invoke('connections:delete', { id }),

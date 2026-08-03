@@ -28,12 +28,32 @@ export function AddConnectionDialog({
   const [connectionString, setConnectionString] = useState('')
   const [managementPort, setManagementPort] = useState('5300')
   const [error, setError] = useState<string | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<'ok' | null>(null)
 
   function resetForm(): void {
     setName('')
     setConnectionString('')
     setManagementPort('5300')
     setError(null)
+    setTesting(false)
+    setTestResult(null)
+  }
+
+  async function handleTest(): Promise<void> {
+    setTesting(true)
+    setError(null)
+    setTestResult(null)
+    const response = await window.sbAdmin.connections.test({
+      connectionString,
+      managementPort: Number(managementPort)
+    })
+    setTesting(false)
+    if (response.ok) {
+      setTestResult('ok')
+    } else {
+      setError(response.error.message)
+    }
   }
 
   async function handleSubmit(event: FormEvent): Promise<void> {
@@ -70,6 +90,11 @@ export function AddConnectionDialog({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        {testResult === 'ok' && (
+          <Alert>
+            <AlertDescription>Connection succeeded.</AlertDescription>
+          </Alert>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1.5">
@@ -102,6 +127,14 @@ export function AddConnectionDialog({
             />
           </div>
           <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleTest}
+              disabled={testing || !connectionString || !managementPort}
+            >
+              {testing ? 'Testing…' : 'Test connection'}
+            </Button>
             <Button type="submit">Add profile</Button>
           </DialogFooter>
         </form>
