@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'vitest'
+import { clampPollIntervalMs, parsePollIntervalMs } from '../../src/main/services/pollPreference'
 import {
-  clampPollIntervalMs,
   DEFAULT_POLL_INTERVAL_MS,
   MAX_POLL_INTERVAL_MS,
-  MIN_POLL_INTERVAL_MS,
-  parsePollIntervalMs
-} from '../../src/main/services/pollPreference'
+  MIN_POLL_INTERVAL_MS
+} from '../../src/shared/pollInterval'
 
 describe('parsePollIntervalMs', () => {
   test('falls back to the default when nothing is saved', () => {

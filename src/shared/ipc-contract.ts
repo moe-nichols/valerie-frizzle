@@ -19,10 +19,6 @@ import type {
 import type { Result } from './errors'
 
 export interface IpcChannels {
-  'app:ping': {
-    request: { message: string }
-    response: Result<{ echo: string; timestamp: number }>
-  }
   'preferences:pollInterval:get': {
     request: undefined
     response: Result<number>

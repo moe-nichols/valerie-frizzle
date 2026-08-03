@@ -134,8 +134,6 @@ const createRuleInput = z.object({
 export const ipcRequestSchemas: {
   [K in keyof IpcChannels]: z.ZodType<IpcChannels[K]['request']>
 } = {
-  'app:ping': z.object({ message: z.string() }),
-
   'preferences:pollInterval:get': z.undefined(),
   'preferences:pollInterval:set': z.object({
     // Enforced here so an out-of-range value is an honest VALIDATION_ERROR at the boundary

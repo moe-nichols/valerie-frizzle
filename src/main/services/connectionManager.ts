@@ -73,8 +73,12 @@ export class ConnectionManager {
       const messagingService = new MessagingService(sbClient)
       this.active.set(profileId, { adminClient, sbClient, adminProxy, messagingService })
     } catch (err) {
-      await sbClient?.close().catch(() => {})
-      await adminProxy?.close().catch(() => {})
+      await sbClient?.close().catch((closeErr) => {
+        log.warn(`error closing client after failed connect for profile ${profileId}`, closeErr)
+      })
+      await adminProxy?.close().catch((closeErr) => {
+        log.warn(`error closing proxy after failed connect for profile ${profileId}`, closeErr)
+      })
       const message = err instanceof Error ? err.message : String(err)
       throw new Error(`could not connect to emulator: ${message}`)
     }
@@ -99,7 +103,9 @@ export class ConnectionManager {
       const message = err instanceof Error ? err.message : String(err)
       throw new Error(`could not connect to emulator: ${message}`)
     } finally {
-      await adminProxy?.close().catch(() => {})
+      await adminProxy?.close().catch((closeErr) => {
+        log.warn('error closing throwaway proxy after connection test', closeErr)
+      })
     }
   }
 

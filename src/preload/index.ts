@@ -21,9 +21,6 @@ function invoke<K extends keyof IpcChannels>(
 }
 
 const api = {
-  app: {
-    ping: (message: string) => invoke('app:ping', { message })
-  },
   preferences: {
     getPollInterval: () => invoke('preferences:pollInterval:get', undefined),
     setPollInterval: (pollIntervalMs: number) =>

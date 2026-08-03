@@ -7,8 +7,6 @@ import type { PreferencesRepo } from './db/preferencesRepo'
 
 const PREFERENCE_KEY = 'pollIntervalMs'
 
-export { DEFAULT_POLL_INTERVAL_MS, MAX_POLL_INTERVAL_MS, MIN_POLL_INTERVAL_MS }
-
 /**
  * Pure — parses whatever's in the preferences table: missing or malformed values fall back
  * to the default, out-of-range values are clamped to the nearest bound (matching how a set

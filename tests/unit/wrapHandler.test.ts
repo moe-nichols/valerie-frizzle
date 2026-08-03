@@ -109,35 +109,32 @@ describe('registerHandler', () => {
   }
 
   test('validates the payload against the channel schema before the handler runs', async () => {
-    const handler = vi.fn(() => ({ echo: 'x', timestamp: 1 }))
-    const invoke = register('app:ping', handler)
+    const handler = vi.fn(() => 10_000)
+    const invoke = register('preferences:pollInterval:set', handler)
 
-    const result = await invoke({} as IpcMainInvokeEvent, { message: 123 })
+    const result = await invoke({} as IpcMainInvokeEvent, { pollIntervalMs: 'not-a-number' })
 
     expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } })
     expect(handler).not.toHaveBeenCalled()
   })
 
   test("passes a valid payload through and wraps the handler's return in a Result", async () => {
-    const invoke = register('app:ping', (request: { message: string }) => ({
-      echo: request.message,
-      timestamp: 5
-    }))
+    const invoke = register(
+      'preferences:pollInterval:set',
+      (request: { pollIntervalMs: number }) => request.pollIntervalMs
+    )
 
-    const result = await invoke({} as IpcMainInvokeEvent, { message: 'hi' })
+    const result = await invoke({} as IpcMainInvokeEvent, { pollIntervalMs: 10_000 })
 
-    expect(result).toEqual({ ok: true, data: { echo: 'hi', timestamp: 5 } })
+    expect(result).toEqual({ ok: true, data: 10_000 })
   })
 
   test('strips unknown keys so only the declared shape reaches the handler', async () => {
-    const handler = vi.fn((request: { message: string }) => ({
-      echo: request.message,
-      timestamp: 1
-    }))
-    const invoke = register('app:ping', handler)
+    const handler = vi.fn((request: { pollIntervalMs: number }) => request.pollIntervalMs)
+    const invoke = register('preferences:pollInterval:set', handler)
 
-    await invoke({} as IpcMainInvokeEvent, { message: 'hi', extra: 'should be dropped' })
+    await invoke({} as IpcMainInvokeEvent, { pollIntervalMs: 10_000, extra: 'should be dropped' })
 
-    expect(handler).toHaveBeenCalledWith({ message: 'hi' }, expect.anything())
+    expect(handler).toHaveBeenCalledWith({ pollIntervalMs: 10_000 }, expect.anything())
   })
 })

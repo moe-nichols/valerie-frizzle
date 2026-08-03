@@ -19,6 +19,12 @@ function isFiniteInRange(value: unknown, min: number, max: number): value is num
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
 }
 
+/** A fresh default-size state (no x/y, letting Electron center the window). A function
+ * rather than a shared constant so no caller can mutate the defaults for everyone. */
+function defaultSize(): WindowState {
+  return { width: DEFAULT_WINDOW_STATE.width, height: DEFAULT_WINDOW_STATE.height }
+}
+
 /**
  * Pure — parses whatever's in the preferences table, falling back to defaults for
  * anything missing, malformed, or nonsensical (e.g. hand-edited or corrupted JSON, or a
@@ -26,17 +32,17 @@ function isFiniteInRange(value: unknown, min: number, max: number): value is num
  * load/save so it's unit-testable without a real database or Electron.
  */
 export function parseWindowState(raw: string | undefined): WindowState {
-  if (!raw) return { width: DEFAULT_WINDOW_STATE.width, height: DEFAULT_WINDOW_STATE.height }
+  if (!raw) return defaultSize()
 
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return { width: DEFAULT_WINDOW_STATE.width, height: DEFAULT_WINDOW_STATE.height }
+    return defaultSize()
   }
 
   if (typeof parsed !== 'object' || parsed === null) {
-    return { width: DEFAULT_WINDOW_STATE.width, height: DEFAULT_WINDOW_STATE.height }
+    return defaultSize()
   }
 
   const candidate = parsed as Partial<Record<keyof WindowState, unknown>>
