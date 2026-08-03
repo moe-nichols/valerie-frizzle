@@ -9,6 +9,7 @@ import {
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 import type { QueueDescription, TopicDescription } from '@shared/domain'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { CreateQueueDialog, CreateTopicDialog } from './CreateEntityDialog'
 import { EditQueueDialog, EditTopicDialog } from './EditEntityDialogs'
 import { EntityCountBadges } from './EntityCountBadges'
@@ -52,6 +53,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
       dispatch(
         kind === 'queue' ? queueDeleted({ profileId, name }) : topicDeleted({ profileId, name })
       )
+      toast.success(`Deleted ${kind} "${name}"`)
       await refresh()
     } else {
       setError(response.error.message)

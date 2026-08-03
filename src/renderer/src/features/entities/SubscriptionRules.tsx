@@ -15,11 +15,13 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
+import { parseEnum } from '@renderer/lib/parseEnum'
 import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
 import { usePolling } from '@renderer/lib/usePolling'
 import { useAppSelector } from '@renderer/store/hooks'
 import type { RuleDescription, RuleFilterInput } from '@shared/domain'
 import { useState } from 'react'
+import { toast } from 'sonner'
 
 interface SubscriptionRulesProps {
   profileId: string
@@ -159,6 +161,9 @@ export function SubscriptionRules({
         : window.sbAdmin.entities.rules.create(profileId, input)
     },
     async () => {
+      toast.success(
+        editingName ? `Saved rule "${form.ruleName}"` : `Created rule "${form.ruleName}"`
+      )
       resetForm()
       await refresh()
     }
@@ -172,6 +177,7 @@ export function SubscriptionRules({
       name
     )
     if (response.ok) {
+      toast.success(`Deleted rule "${name}"`)
       await refresh()
     } else {
       setError(response.error.message)
@@ -186,7 +192,11 @@ export function SubscriptionRules({
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="ml-6 space-y-3 pt-2">
-        {error && <p className="text-destructive text-sm">{error}</p>}
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
         <ul className="space-y-1">
           {rules.map((rule) => (
             <li key={rule.name} className="flex items-center gap-2 text-sm">
@@ -232,7 +242,9 @@ export function SubscriptionRules({
             <Label>Filter type</Label>
             <Select
               value={form.filterType}
-              onValueChange={(value) => set('filterType', value as 'Sql' | 'Correlation')}
+              onValueChange={(value) =>
+                set('filterType', parseEnum(['Sql', 'Correlation'], value, 'Sql'))
+              }
             >
               <SelectTrigger className="w-40">
                 <SelectValue />

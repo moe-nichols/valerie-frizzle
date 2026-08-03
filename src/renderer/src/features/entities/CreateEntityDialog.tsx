@@ -70,6 +70,7 @@ function CreateEntityDialog<TState>({
       }}
       submitLabel={config.title}
       action={() => config.create(profileId, name, fields)}
+      successToast={`Created "${name}"`}
       onSuccess={async () => {
         resetForm()
         onOpenChange(false)

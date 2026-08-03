@@ -1,4 +1,5 @@
 import { ConfirmDialog, permanentRemovalDescription } from '@renderer/components/ConfirmDialog'
+import { EmptyState } from '@renderer/components/EmptyState'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
@@ -9,11 +10,13 @@ import {
 } from '@renderer/components/ui/collapsible'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { fetchSubscriptionMessageCount } from '@renderer/lib/messageCount'
 import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
 import { useEntityCounts } from '@renderer/lib/useEntityCounts'
 import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { MessageComposer } from '../messages/MessageComposer'
 import { EditSubscriptionDialog } from './EditEntityDialogs'
 import { EntityCountBadges } from './EntityCountBadges'
@@ -124,6 +127,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
         toCreateSubscriptionInput(topicName, newSubscriptionName, newSubscriptionFields)
       ),
     async () => {
+      toast.success(`Created subscription "${newSubscriptionName}"`)
       setNewSubscriptionName('')
       setNewSubscriptionFields(emptySubscriptionFields)
       setNewSubscriptionAdvancedOpen(false)
@@ -138,6 +142,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
       subscriptionName
     )
     if (response.ok) {
+      toast.success(`Deleted subscription "${subscriptionName}"`)
       await refresh()
     } else {
       setError(response.error.message)
@@ -163,7 +168,12 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        {!topic && !error && <p className="text-muted-foreground text-sm">Loading…</p>}
+        {!topic && !error && (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-72" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+        )}
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Send</h3>
           {/* Keyed so a half-composed draft doesn't silently carry over to another entity. */}
@@ -175,9 +185,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
         </div>
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Subscriptions</h3>
-          {subscriptions.length === 0 && (
-            <p className="text-muted-foreground text-sm">No subscriptions yet.</p>
-          )}
+          {subscriptions.length === 0 && <EmptyState message="No subscriptions yet." />}
           <ul className="space-y-2">
             {subscriptions.map((subscription) => (
               <li

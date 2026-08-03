@@ -1,3 +1,4 @@
+import { EmptyState } from '@renderer/components/EmptyState'
 import {
   Sidebar,
   SidebarContent,
@@ -76,15 +77,11 @@ function App(): React.JSX.Element {
                 <TopicPanel profileId={selectedProfileId} topicName={activeTopicName} />
               )}
               {!activeQueueName && !activeTopicName && (
-                <p className="text-muted-foreground text-sm">
-                  Select a queue or topic in the sidebar to get started.
-                </p>
+                <EmptyState message="Select a queue or topic in the sidebar to get started." />
               )}
             </>
           ) : (
-            <p className="text-muted-foreground text-sm">
-              Select or connect to a profile in the sidebar to get started.
-            </p>
+            <EmptyState message="Select or connect to a profile in the sidebar to get started." />
           )}
         </div>
       </SidebarInset>

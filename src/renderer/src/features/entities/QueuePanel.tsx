@@ -1,6 +1,7 @@
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import {
   fetchQueueMessageCount,
   formatMessageCount,
@@ -83,7 +84,12 @@ export function QueuePanel({ profileId, queueName }: QueuePanelProps): React.JSX
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        {!queue && !error && <p className="text-muted-foreground text-sm">Loading…</p>}
+        {!queue && !error && (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-72" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+        )}
         <div className="space-y-3">
           <h3 className="text-lg font-medium">Send</h3>
           {/* Keyed so a half-composed draft doesn't silently carry over to another entity. */}

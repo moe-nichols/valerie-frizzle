@@ -1,4 +1,5 @@
 import { ConfirmDialog, permanentRemovalDescription } from '@renderer/components/ConfirmDialog'
+import { EmptyState } from '@renderer/components/EmptyState'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import {
   DropdownMenu,
@@ -28,6 +29,7 @@ import {
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 import { Loader2, MoreHorizontal, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { AddConnectionDialog } from './AddConnectionDialog'
 
 export function ConnectionSidebar(): React.JSX.Element {
@@ -76,12 +78,15 @@ export function ConnectionSidebar(): React.JSX.Element {
   async function handleConfirmDelete(): Promise<void> {
     const id = deletingProfileId
     if (!id) return
+    const name = deletingProfile?.name
     setDeletingProfileId(null)
     setError(null)
 
     const result = await dispatch(deleteProfile(id))
     if (deleteProfile.rejected.match(result)) {
       setError(result.payload ?? 'Failed to delete')
+    } else {
+      toast.success(`Deleted profile "${name}"`)
     }
   }
 
@@ -102,7 +107,7 @@ export function ConnectionSidebar(): React.JSX.Element {
             </Alert>
           )}
           {profiles.length === 0 && (
-            <p className="text-muted-foreground px-2 text-sm">No saved profiles yet.</p>
+            <EmptyState message="No saved profiles yet." className="px-2" />
           )}
           <SidebarMenu>
             {profiles.map((profile) => {

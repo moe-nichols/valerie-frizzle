@@ -14,6 +14,7 @@ import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
 import { createProfile } from '@renderer/store/connectionsSlice'
 import { useAppDispatch } from '@renderer/store/hooks'
 import { useState } from 'react'
+import { toast } from 'sonner'
 
 interface AddConnectionDialogProps {
   open: boolean
@@ -48,6 +49,7 @@ export function AddConnectionDialog({
       return { ok: true, data: undefined }
     },
     () => {
+      toast.success(`Added profile "${name}"`)
       resetForm()
       onOpenChange(false)
     }

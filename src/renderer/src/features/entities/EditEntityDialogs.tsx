@@ -35,6 +35,7 @@ function EditEntityDialog<TDescription, TState>({
   fieldsFromDescription,
   Fields,
   update,
+  successToast,
   open,
   onOpenChange,
   onUpdated
@@ -50,6 +51,7 @@ function EditEntityDialog<TDescription, TState>({
     onChange: (next: TState) => void
   }) => React.JSX.Element
   update: (fields: TState) => Promise<Result<unknown>>
+  successToast: string
 }): React.JSX.Element {
   const [fields, setFields] = useState<TState>(() => fieldsFromDescription(description))
 
@@ -65,6 +67,7 @@ function EditEntityDialog<TDescription, TState>({
       onOpenChange={onOpenChange}
       submitLabel="Save"
       action={() => update(fields)}
+      successToast={successToast}
       onSuccess={async () => {
         onOpenChange(false)
         await onUpdated()
@@ -90,6 +93,7 @@ export function EditQueueDialog({
       update={(fields) =>
         window.sbAdmin.entities.queues.update(profileId, queue.name, toUpdateQueueInput(fields))
       }
+      successToast={`Saved "${queue.name}"`}
       {...common}
     />
   )
@@ -110,6 +114,7 @@ export function EditTopicDialog({
       update={(fields) =>
         window.sbAdmin.entities.topics.update(profileId, topic.name, toUpdateTopicInput(fields))
       }
+      successToast={`Saved "${topic.name}"`}
       {...common}
     />
   )
@@ -138,6 +143,7 @@ export function EditSubscriptionDialog({
           toUpdateSubscriptionInput(fields)
         )
       }
+      successToast={`Saved "${subscription.subscriptionName}"`}
       {...common}
     />
   )

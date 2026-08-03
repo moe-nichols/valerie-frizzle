@@ -10,6 +10,7 @@ import {
 import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
 import type { Result } from '@shared/errors'
 import { useEffect } from 'react'
+import { toast } from 'sonner'
 
 interface FormDialogProps {
   title: string
@@ -18,6 +19,9 @@ interface FormDialogProps {
   submitLabel: string
   /** The IPC call. A failed Result's message renders as the dialog's error alert. */
   action: () => Promise<Result<unknown>>
+  /** Toasted after a successful submit — the app's convention for fire-and-forget
+   * success feedback (the dialog closes, so inline feedback would never be seen). */
+  successToast?: string
   /** Runs after a successful submit — closing the dialog and refreshing belong here. */
   onSuccess?: () => void | Promise<void>
   children: React.ReactNode
@@ -32,10 +36,14 @@ export function FormDialog({
   onOpenChange,
   submitLabel,
   action,
+  successToast,
   onSuccess,
   children
 }: FormDialogProps): React.JSX.Element {
-  const { submit, submitting, error, reset } = useAsyncSubmit(action, onSuccess)
+  const { submit, submitting, error, reset } = useAsyncSubmit(action, async () => {
+    if (successToast) toast.success(successToast)
+    await onSuccess?.()
+  })
 
   // A stale error from a prior attempt must not greet the next open.
   useEffect(() => {

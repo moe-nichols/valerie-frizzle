@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
+import { parseEnum } from '@renderer/lib/parseEnum'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 import { updatePollInterval, updateTheme } from '@renderer/store/settingsSlice'
 import { MAX_POLL_INTERVAL_MS, MIN_POLL_INTERVAL_MS } from '@shared/pollInterval'
@@ -97,7 +98,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps): Rea
                 not gated behind the poll-interval Save button. */}
             <Select
               value={theme ?? 'dark'}
-              onValueChange={(value) => dispatch(updateTheme(value as 'light' | 'dark'))}
+              onValueChange={(value) =>
+                dispatch(updateTheme(parseEnum(['light', 'dark'], value, 'dark')))
+              }
             >
               <SelectTrigger className="w-40">
                 <SelectValue />

@@ -49,19 +49,21 @@ export function MessageTable({
 }): React.JSX.Element {
   const sortIndicator = (column: SortColumn): string =>
     sort.column === column ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
+  const ariaSort = (column: SortColumn): 'ascending' | 'descending' | 'none' =>
+    sort.column === column ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>
+          <TableHead aria-sort={ariaSort('seq')}>
             <button type="button" className="font-medium" onClick={() => onToggleSort('seq')}>
               Seq{sortIndicator('seq')}
             </button>
           </TableHead>
           <TableHead>Label</TableHead>
           <TableHead>Correlation ID</TableHead>
-          <TableHead>
+          <TableHead aria-sort={ariaSort('enqueued')}>
             <button type="button" className="font-medium" onClick={() => onToggleSort('enqueued')}>
               Enqueued{sortIndicator('enqueued')}
             </button>

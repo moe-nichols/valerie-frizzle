@@ -10,9 +10,11 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
+import { parseEnum } from '@renderer/lib/parseEnum'
 import { useAppSelector } from '@renderer/store/hooks'
 import type { ApplicationPropertyValue, MessageEnvelope } from '@shared/domain'
 import { type FormEvent, useState } from 'react'
+import { toast } from 'sonner'
 
 interface MessageComposerProps {
   profileId: string
@@ -56,7 +58,6 @@ export function MessageComposer({
   const [properties, setProperties] = useState<PropertyRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
-  const [sentAt, setSentAt] = useState<string | null>(null)
   const appTheme = useAppSelector((state) => state.settings.theme)
 
   function handleAddProperty(): void {
@@ -75,7 +76,6 @@ export function MessageComposer({
     event.preventDefault()
     setSending(true)
     setError(null)
-    setSentAt(null)
 
     const applicationProperties: Record<string, ApplicationPropertyValue> = {}
     for (const row of properties) {
@@ -102,7 +102,7 @@ export function MessageComposer({
     const response = await window.sbAdmin.messages.send(profileId, entityPath, envelope)
     setSending(false)
     if (response.ok) {
-      setSentAt(new Date().toLocaleTimeString())
+      toast.success(`Message sent to ${entityPath}`)
     } else {
       setError(response.error.message)
     }
@@ -115,11 +115,12 @@ export function MessageComposer({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {sentAt && <p className="text-sm text-emerald-600 dark:text-emerald-400">Sent at {sentAt}</p>}
-
       <div className="space-y-1.5">
         <Label>Body mode</Label>
-        <Select value={bodyMode} onValueChange={(value) => setBodyMode(value as BodyMode)}>
+        <Select
+          value={bodyMode}
+          onValueChange={(value) => setBodyMode(parseEnum(['text', 'json', 'xml'], value, 'text'))}
+        >
           <SelectTrigger className="w-32">
             <SelectValue />
           </SelectTrigger>

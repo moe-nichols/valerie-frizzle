@@ -1,9 +1,11 @@
+import { EmptyState } from '@renderer/components/EmptyState'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
+import { parseEnum } from '@renderer/lib/parseEnum'
 import { useIsCurrent } from '@renderer/lib/useIsCurrent'
 import type { ReceivedMessageDescription, ReceiveMode } from '@shared/domain'
 import type { IpcError, Result } from '@shared/errors'
@@ -260,7 +262,9 @@ export function MessageBrowser({
 
         <RadioGroup
           value={mode}
-          onValueChange={(value) => setMode(value as ReceiveMode)}
+          onValueChange={(value) =>
+            setMode(parseEnum(['peekLock', 'receiveAndDelete'], value, 'peekLock'))
+          }
           className="flex flex-row gap-4"
         >
           <div className="flex items-center gap-2">
@@ -338,12 +342,10 @@ export function MessageBrowser({
         onResubmit={handleResubmit}
       />
       {messages.length === 0 && (
-        <p className="text-muted-foreground text-sm">
-          No messages loaded — peek or receive to load some.
-        </p>
+        <EmptyState message="No messages loaded — peek or receive to load some." />
       )}
       {messages.length > 0 && visibleMessages.length === 0 && (
-        <p className="text-muted-foreground text-sm">No loaded messages match the filter.</p>
+        <EmptyState message="No loaded messages match the filter." />
       )}
       {canLoadMore && (
         <Button variant="outline" size="sm" onClick={handleLoadMore} disabled={loading}>
