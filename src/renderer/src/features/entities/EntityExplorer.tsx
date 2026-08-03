@@ -11,18 +11,15 @@ import {
 } from '@renderer/components/ui/collapsible'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
+import { queueDeleted, queueSelected } from '@renderer/store/connectionsSlice'
+import { useAppDispatch } from '@renderer/store/hooks'
 
 interface EntityExplorerProps {
   profileId: string | null
-  onSelectQueue: (queueName: string) => void
-  onQueueDeleted: (queueName: string) => void
 }
 
-export function EntityExplorer({
-  profileId,
-  onSelectQueue,
-  onQueueDeleted
-}: EntityExplorerProps): React.JSX.Element {
+export function EntityExplorer({ profileId }: EntityExplorerProps): React.JSX.Element {
+  const dispatch = useAppDispatch()
   const [queues, setQueues] = useState<QueueDescription[]>([])
   const [topics, setTopics] = useState<TopicDescription[]>([])
   const [subscriptionsByTopic, setSubscriptionsByTopic] = useState<
@@ -34,7 +31,9 @@ export function EntityExplorer({
 
   const [newQueueName, setNewQueueName] = useState('')
   const [newTopicName, setNewTopicName] = useState('')
-  const [newSubscriptionNameByTopic, setNewSubscriptionNameByTopic] = useState<Record<string, string>>({})
+  const [newSubscriptionNameByTopic, setNewSubscriptionNameByTopic] = useState<
+    Record<string, string>
+  >({})
 
   async function refresh(currentProfileId: string): Promise<void> {
     setLoading(true)
@@ -109,7 +108,7 @@ export function EntityExplorer({
     if (!profileId) return
     const response = await window.sbAdmin.entities.queues.delete(profileId, name)
     if (response.ok) {
-      onQueueDeleted(name)
+      dispatch(queueDeleted(name))
       await refresh(profileId)
     } else {
       setError(response.error.message)
@@ -154,7 +153,10 @@ export function EntityExplorer({
     }
   }
 
-  async function handleDeleteSubscription(topicName: string, subscriptionName: string): Promise<void> {
+  async function handleDeleteSubscription(
+    topicName: string,
+    subscriptionName: string
+  ): Promise<void> {
     if (!profileId) return
     const response = await window.sbAdmin.entities.subscriptions.delete(
       profileId,
@@ -196,13 +198,22 @@ export function EntityExplorer({
             >
               <span className="font-medium">{queue.name}</span>
               <span className="text-muted-foreground text-sm">
-                ({queue.status}, max {queue.maxSizeInMegabytes}MB, TTL {queue.defaultMessageTimeToLive})
+                ({queue.status}, max {queue.maxSizeInMegabytes}MB, TTL{' '}
+                {queue.defaultMessageTimeToLive})
               </span>
               <div className="ml-auto flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => onSelectQueue(queue.name)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => dispatch(queueSelected(queue.name))}
+                >
                   Messages
                 </Button>
-                <Button variant="destructive" size="sm" onClick={() => handleDeleteQueue(queue.name)}>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleDeleteQueue(queue.name)}
+                >
                   Delete
                 </Button>
                 <QueuePurgeControl profileId={profileId} entityPath={queue.name} />
@@ -264,7 +275,9 @@ export function EntityExplorer({
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => handleDeleteSubscription(topic.name, subscription.subscriptionName)}
+                            onClick={() =>
+                              handleDeleteSubscription(topic.name, subscription.subscriptionName)
+                            }
                           >
                             Delete
                           </Button>
@@ -285,7 +298,9 @@ export function EntityExplorer({
                     className="flex items-end gap-2"
                   >
                     <div className="space-y-1.5">
-                      <Label htmlFor={`new-subscription-${topic.name}`}>New subscription name</Label>
+                      <Label htmlFor={`new-subscription-${topic.name}`}>
+                        New subscription name
+                      </Label>
                       <Input
                         id={`new-subscription-${topic.name}`}
                         value={newSubscriptionNameByTopic[topic.name] ?? ''}

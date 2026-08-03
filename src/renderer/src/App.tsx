@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { Radio } from 'lucide-react'
 import { buildDeadLetterQueuePath } from '@shared/domain'
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card'
@@ -16,17 +15,11 @@ import { EntityExplorer } from './features/entities/EntityExplorer'
 import { QueuePurgeControl } from './features/entities/QueuePurgeControl'
 import { MessageComposer } from './features/messages/MessageComposer'
 import { MessageBrowser } from './features/messages/MessageBrowser'
+import { useAppSelector } from './store/hooks'
 
 function App(): React.JSX.Element {
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
-  const [activeQueueName, setActiveQueueName] = useState<string | null>(null)
-
-  // A queue selected under one connection has no meaning under another — without this,
-  // switching the sidebar's selected tab while a queue was open showed stale/mismatched
-  // queue data for the newly-selected profile.
-  useEffect(() => {
-    setActiveQueueName(null)
-  }, [selectedProfileId])
+  const selectedProfileId = useAppSelector((state) => state.connections.selectedProfileId)
+  const activeQueueName = useAppSelector((state) => state.connections.activeQueueName)
 
   return (
     <SidebarProvider>
@@ -40,10 +33,7 @@ function App(): React.JSX.Element {
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <ConnectionSidebar
-            selectedProfileId={selectedProfileId}
-            onSelectedProfileChange={setSelectedProfileId}
-          />
+          <ConnectionSidebar />
         </SidebarContent>
       </Sidebar>
 
@@ -60,13 +50,7 @@ function App(): React.JSX.Element {
                   <CardTitle className="text-xl">Entities</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <EntityExplorer
-                    profileId={selectedProfileId}
-                    onSelectQueue={setActiveQueueName}
-                    onQueueDeleted={(name) =>
-                      setActiveQueueName((current) => (current === name ? null : current))
-                    }
-                  />
+                  <EntityExplorer profileId={selectedProfileId} />
                 </CardContent>
               </Card>
 

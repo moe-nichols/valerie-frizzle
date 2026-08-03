@@ -11,18 +11,19 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
+import { createProfile } from '@renderer/store/connectionsSlice'
+import { useAppDispatch } from '@renderer/store/hooks'
 
 interface AddConnectionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreated: () => void | Promise<void>
 }
 
 export function AddConnectionDialog({
   open,
-  onOpenChange,
-  onCreated
+  onOpenChange
 }: AddConnectionDialogProps): React.JSX.Element {
+  const dispatch = useAppDispatch()
   const [name, setName] = useState('')
   const [connectionString, setConnectionString] = useState('')
   const [managementPort, setManagementPort] = useState('5300')
@@ -37,18 +38,15 @@ export function AddConnectionDialog({
 
   async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault()
-    const response = await window.sbAdmin.connections.create({
-      name,
-      connectionString,
-      managementPort: Number(managementPort)
-    })
-    if (response.ok) {
-      resetForm()
-      onOpenChange(false)
-      await onCreated()
-    } else {
-      setError(response.error.message)
+    const result = await dispatch(
+      createProfile({ name, connectionString, managementPort: Number(managementPort) })
+    )
+    if (createProfile.rejected.match(result)) {
+      setError(result.payload ?? 'Failed to create profile')
+      return
     }
+    resetForm()
+    onOpenChange(false)
   }
 
   return (

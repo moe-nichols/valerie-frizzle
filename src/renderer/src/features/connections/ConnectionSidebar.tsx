@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Loader2, MoreHorizontal, Plus } from 'lucide-react'
-import type { ConnectionProfile } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import {
   AlertDialog,
@@ -30,72 +29,50 @@ import {
   SidebarMenuButton,
   SidebarMenuItem
 } from '@renderer/components/ui/sidebar'
+import {
+  deleteProfile,
+  disconnectProfile,
+  fetchProfiles,
+  profileSelected,
+  selectProfile
+} from '@renderer/store/connectionsSlice'
+import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 import { AddConnectionDialog } from './AddConnectionDialog'
 
-interface ConnectionSidebarProps {
-  selectedProfileId: string | null
-  onSelectedProfileChange: (profileId: string | null) => void
-}
+export function ConnectionSidebar(): React.JSX.Element {
+  const dispatch = useAppDispatch()
+  const profiles = useAppSelector((state) => state.connections.profiles)
+  const connectedIds = useAppSelector((state) => state.connections.connectedIds)
+  const connectingIds = useAppSelector((state) => state.connections.connectingIds)
+  const selectedProfileId = useAppSelector((state) => state.connections.selectedProfileId)
 
-function removeFromSet(set: Set<string>, id: string): Set<string> {
-  const next = new Set(set)
-  next.delete(id)
-  return next
-}
-
-export function ConnectionSidebar({
-  selectedProfileId,
-  onSelectedProfileChange
-}: ConnectionSidebarProps): React.JSX.Element {
-  const [profiles, setProfiles] = useState<ConnectionProfile[]>([])
-  const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set())
-  const [connectingIds, setConnectingIds] = useState<Set<string>>(new Set())
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function refresh(): Promise<void> {
-    const response = await window.sbAdmin.connections.list()
-    if (response.ok) {
-      setProfiles(response.data)
-    } else {
-      setError(response.error.message)
-    }
-  }
-
   useEffect(() => {
-    refresh()
-  }, [])
+    dispatch(fetchProfiles())
+  }, [dispatch])
 
   async function handleSelect(id: string): Promise<void> {
-    if (connectedIds.has(id)) {
-      onSelectedProfileChange(id)
+    if (connectedIds.includes(id)) {
+      dispatch(profileSelected(id))
       return
     }
-    if (connectingIds.has(id)) return
+    if (connectingIds.includes(id)) return
 
     setError(null)
-    setConnectingIds((prev) => new Set(prev).add(id))
-    const response = await window.sbAdmin.connections.connect(id)
-    setConnectingIds((prev) => removeFromSet(prev, id))
-
-    if (response.ok) {
-      setConnectedIds((prev) => new Set(prev).add(id))
-      onSelectedProfileChange(id)
-    } else {
-      setError(response.error.message)
+    const result = await dispatch(selectProfile(id))
+    if (selectProfile.rejected.match(result)) {
+      setError(result.payload ?? 'Failed to connect')
     }
   }
 
   async function handleDisconnect(id: string): Promise<void> {
-    const response = await window.sbAdmin.connections.disconnect(id)
-    if (response.ok) {
-      setConnectedIds((prev) => removeFromSet(prev, id))
-      if (selectedProfileId === id) {
-        onSelectedProfileChange(null)
-      }
-    } else {
-      setError(response.error.message)
+    setError(null)
+    const result = await dispatch(disconnectProfile(id))
+    if (disconnectProfile.rejected.match(result)) {
+      setError(result.payload ?? 'Failed to disconnect')
     }
   }
 
@@ -103,20 +80,11 @@ export function ConnectionSidebar({
     const id = deletingProfileId
     if (!id) return
     setDeletingProfileId(null)
+    setError(null)
 
-    if (connectedIds.has(id)) {
-      await window.sbAdmin.connections.disconnect(id)
-      setConnectedIds((prev) => removeFromSet(prev, id))
-    }
-
-    const response = await window.sbAdmin.connections.delete(id)
-    if (response.ok) {
-      if (selectedProfileId === id) {
-        onSelectedProfileChange(null)
-      }
-      await refresh()
-    } else {
-      setError(response.error.message)
+    const result = await dispatch(deleteProfile(id))
+    if (deleteProfile.rejected.match(result)) {
+      setError(result.payload ?? 'Failed to delete')
     }
   }
 
@@ -141,8 +109,8 @@ export function ConnectionSidebar({
           )}
           <SidebarMenu>
             {profiles.map((profile) => {
-              const isConnected = connectedIds.has(profile.id)
-              const isConnecting = connectingIds.has(profile.id)
+              const isConnected = connectedIds.includes(profile.id)
+              const isConnecting = connectingIds.includes(profile.id)
               return (
                 <SidebarMenuItem key={profile.id}>
                   <SidebarMenuButton
@@ -190,11 +158,7 @@ export function ConnectionSidebar({
         </SidebarGroupContent>
       </SidebarGroup>
 
-      <AddConnectionDialog
-        open={addDialogOpen}
-        onOpenChange={setAddDialogOpen}
-        onCreated={refresh}
-      />
+      <AddConnectionDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} />
 
       <AlertDialog
         open={deletingProfileId !== null}
