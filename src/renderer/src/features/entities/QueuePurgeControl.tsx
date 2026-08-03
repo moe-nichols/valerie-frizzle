@@ -1,14 +1,5 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@renderer/components/ui/alert-dialog'
-import { Button, buttonVariants } from '@renderer/components/ui/button'
+import { ConfirmDialog } from '@renderer/components/ConfirmDialog'
+import { Button } from '@renderer/components/ui/button'
 import { PEEK_COUNT_CAP, PEEK_FROM_START } from '@renderer/lib/messageCount'
 import { useEffect, useRef, useState } from 'react'
 
@@ -133,26 +124,14 @@ export function QueuePurgeControl({
         </Button>
       )}
 
-      <AlertDialog open={confirming} onOpenChange={(open) => !open && handleCancel()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Purge messages?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Delete all {countLabel} active message{messageCount === 1 ? '' : 's'} in &quot;{label}
-              &quot;?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmPurge}
-              className={buttonVariants({ variant: 'destructive' })}
-            >
-              Yes, purge {countLabel}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={(open) => !open && handleCancel()}
+        title="Purge messages?"
+        description={`Delete all ${countLabel} active message${messageCount === 1 ? '' : 's'} in "${label}"?`}
+        confirmLabel={`Yes, purge ${countLabel}`}
+        onConfirm={handleConfirmPurge}
+      />
 
       {progress && (
         <span className="text-sm">

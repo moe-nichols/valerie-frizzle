@@ -1,16 +1,7 @@
+import { ConfirmDialog, permanentRemovalDescription } from '@renderer/components/ConfirmDialog'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@renderer/components/ui/alert-dialog'
 import { Badge } from '@renderer/components/ui/badge'
-import { Button, buttonVariants } from '@renderer/components/ui/button'
+import { Button } from '@renderer/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -257,28 +248,13 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         />
       )}
 
-      <AlertDialog
+      <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(nextOpen) => !nextOpen && setDeleting(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete {deleting?.kind}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove &quot;{deleting?.name}&quot;. This can&apos;t be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className={buttonVariants({ variant: 'destructive' })}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title={`Delete ${deleting?.kind}?`}
+        description={permanentRemovalDescription(deleting?.name ?? '')}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   )
 }

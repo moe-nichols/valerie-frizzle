@@ -1,15 +1,5 @@
+import { ConfirmDialog, permanentRemovalDescription } from '@renderer/components/ConfirmDialog'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@renderer/components/ui/alert-dialog'
-import { buttonVariants } from '@renderer/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -168,29 +158,13 @@ export function ConnectionSidebar(): React.JSX.Element {
 
       <AddConnectionDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} />
 
-      <AlertDialog
+      <ConfirmDialog
         open={deletingProfileId !== null}
         onOpenChange={(nextOpen) => !nextOpen && setDeletingProfileId(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete connection profile?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove &quot;{deletingProfile?.name}&quot;. This can&apos;t be
-              undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className={buttonVariants({ variant: 'destructive' })}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="Delete connection profile?"
+        description={permanentRemovalDescription(deletingProfile?.name ?? '')}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   )
 }
