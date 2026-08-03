@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { MoreHorizontal, Plus, RefreshCw } from 'lucide-react'
 import type { QueueDescription, TopicDescription } from '@shared/domain'
+import { buildDeadLetterQueuePath } from '@shared/domain'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import {
   AlertDialog,
@@ -27,6 +28,7 @@ import {
   SidebarMenuSubItem
 } from '@renderer/components/ui/sidebar'
 import {
+  fetchQueueDeadLetterCount,
   fetchQueueMessageCount,
   formatMessageCount,
   type MessageCountResult
@@ -60,6 +62,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
   const [queues, setQueues] = useState<QueueDescription[]>([])
   const [topics, setTopics] = useState<TopicDescription[]>([])
   const [queueCounts, setQueueCounts] = useState<Record<string, MessageCountResult>>({})
+  const [queueDlqCounts, setQueueDlqCounts] = useState<Record<string, MessageCountResult>>({})
   const [error, setError] = useState<string | null>(null)
 
   const [createQueueOpen, setCreateQueueOpen] = useState(false)
@@ -84,9 +87,28 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
       }
       setQueues(queuesResponse.data)
 
-      const counts = await Promise.all(
-        queuesResponse.data.map((queue) => fetchQueueMessageCount(profileId, queue.name))
-      )
+      const [counts, dlqCounts] = await Promise.all([
+        Promise.all(
+          queuesResponse.data.map((queue) => fetchQueueMessageCount(profileId, queue.name))
+        ),
+        Promise.all(
+          queuesResponse.data.map((queue) =>
+            fetchQueueDeadLetterCount(profileId, buildDeadLetterQueuePath(queue.name))
+          )
+        )
+      ])
+      setQueueDlqCounts((prev) => {
+        const next: Record<string, MessageCountResult> = {}
+        queuesResponse.data.forEach((queue, index) => {
+          const count = dlqCounts[index]
+          if (count) {
+            next[queue.name] = count
+          } else if (prev[queue.name]) {
+            next[queue.name] = prev[queue.name]
+          }
+        })
+        return next
+      })
       setQueueCounts((prev) => {
         const next: Record<string, MessageCountResult> = {}
         queuesResponse.data.forEach((queue, index) => {
@@ -190,6 +212,15 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
             {queueCounts[queue.name] && (
               <Badge variant="secondary" className="shrink-0">
                 {formatMessageCount(queueCounts[queue.name])}
+              </Badge>
+            )}
+            {queueDlqCounts[queue.name] && queueDlqCounts[queue.name].count > 0 && (
+              <Badge
+                variant="destructive"
+                className="shrink-0"
+                title="Dead-lettered messages"
+              >
+                {formatMessageCount(queueDlqCounts[queue.name])} DLQ
               </Badge>
             )}
             <DropdownMenu>

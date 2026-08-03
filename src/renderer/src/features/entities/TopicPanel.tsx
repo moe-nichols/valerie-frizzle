@@ -30,6 +30,9 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
   const [subscriptionCounts, setSubscriptionCounts] = useState<Record<string, MessageCountResult>>(
     {}
   )
+  const [subscriptionDlqCounts, setSubscriptionDlqCounts] = useState<
+    Record<string, MessageCountResult>
+  >({})
   const [error, setError] = useState<string | null>(null)
   const [newSubscriptionName, setNewSubscriptionName] = useState('')
   const isCurrent = useIsCurrent(`${profileId}::${topicName}`)
@@ -52,24 +55,35 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     if (!response.ok) return response.error.message
     setSubscriptions(response.data)
 
-    const counts = await Promise.all(
-      response.data.map((subscription) =>
-        fetchSubscriptionMessageCount(profileId, topicName, subscription.subscriptionName)
+    const [counts, dlqCounts] = await Promise.all([
+      Promise.all(
+        response.data.map((subscription) =>
+          fetchSubscriptionMessageCount(profileId, topicName, subscription.subscriptionName)
+        )
+      ),
+      Promise.all(
+        response.data.map((subscription) =>
+          fetchSubscriptionMessageCount(profileId, topicName, subscription.subscriptionName, true)
+        )
       )
-    )
+    ])
     if (!isCurrent()) return null
-    setSubscriptionCounts((prev) => {
-      const next: Record<string, MessageCountResult> = {}
-      response.data.forEach((subscription, index) => {
-        const count = counts[index]
-        if (count) {
-          next[subscription.subscriptionName] = count
-        } else if (prev[subscription.subscriptionName]) {
-          next[subscription.subscriptionName] = prev[subscription.subscriptionName]
-        }
-      })
-      return next
-    })
+    const mergeCounts =
+      (results: (MessageCountResult | null)[]) =>
+      (prev: Record<string, MessageCountResult>): Record<string, MessageCountResult> => {
+        const next: Record<string, MessageCountResult> = {}
+        response.data.forEach((subscription, index) => {
+          const count = results[index]
+          if (count) {
+            next[subscription.subscriptionName] = count
+          } else if (prev[subscription.subscriptionName]) {
+            next[subscription.subscriptionName] = prev[subscription.subscriptionName]
+          }
+        })
+        return next
+      }
+    setSubscriptionCounts(mergeCounts(counts))
+    setSubscriptionDlqCounts(mergeCounts(dlqCounts))
     return null
   }
 
@@ -86,6 +100,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     setTopic(null)
     setSubscriptions([])
     setSubscriptionCounts({})
+    setSubscriptionDlqCounts({})
     setError(null)
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,6 +176,12 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                       {formatMessageCount(subscriptionCounts[subscription.subscriptionName])} active
                     </Badge>
                   )}
+                  {subscriptionDlqCounts[subscription.subscriptionName] &&
+                    subscriptionDlqCounts[subscription.subscriptionName].count > 0 && (
+                      <Badge variant="destructive" title="Dead-lettered messages">
+                        {formatMessageCount(subscriptionDlqCounts[subscription.subscriptionName])} DLQ
+                      </Badge>
+                    )}
                   <Button
                     variant="destructive"
                     size="sm"
