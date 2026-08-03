@@ -1,3 +1,4 @@
+import { ConfirmDialog, permanentRemovalDescription } from '@renderer/components/ConfirmDialog'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
@@ -53,6 +54,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
   const [editingSubscription, setEditingSubscription] = useState<SubscriptionDescription | null>(
     null
   )
+  const [deletingSubscription, setDeletingSubscription] = useState<string | null>(null)
 
   const { isCurrent, refresh } = useEntityPanel(
     `${profileId}::${topicName}`,
@@ -228,7 +230,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => handleDeleteSubscription(subscription.subscriptionName)}
+                    onClick={() => setDeletingSubscription(subscription.subscriptionName)}
                   >
                     Delete
                   </Button>
@@ -287,6 +289,19 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
           </form>
         </div>
       </CardContent>
+
+      <ConfirmDialog
+        open={deletingSubscription !== null}
+        onOpenChange={(nextOpen) => !nextOpen && setDeletingSubscription(null)}
+        title="Delete subscription?"
+        description={permanentRemovalDescription(deletingSubscription ?? '')}
+        onConfirm={() => {
+          if (!deletingSubscription) return
+          const name = deletingSubscription
+          setDeletingSubscription(null)
+          void handleDeleteSubscription(name)
+        }}
+      />
 
       {editingSubscription && (
         <EditSubscriptionDialog

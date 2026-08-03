@@ -1,3 +1,4 @@
+import { ConfirmDialog, permanentRemovalDescription } from '@renderer/components/ConfirmDialog'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -61,6 +62,7 @@ export function SubscriptionRules({
   const [actionSql, setActionSql] = useState('')
   // Non-null while editing an existing rule (its name is then immutable); null = create mode.
   const [editingName, setEditingName] = useState<string | null>(null)
+  const [deletingName, setDeletingName] = useState<string | null>(null)
 
   async function refresh(): Promise<void> {
     const response = await window.sbAdmin.entities.rules.list(
@@ -186,7 +188,7 @@ export function SubscriptionRules({
               >
                 Edit
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => handleDelete(rule.name)}>
+              <Button variant="destructive" size="sm" onClick={() => setDeletingName(rule.name)}>
                 Delete
               </Button>
             </li>
@@ -310,6 +312,18 @@ export function SubscriptionRules({
             )}
           </div>
         </form>
+        <ConfirmDialog
+          open={deletingName !== null}
+          onOpenChange={(nextOpen) => !nextOpen && setDeletingName(null)}
+          title="Delete rule?"
+          description={permanentRemovalDescription(deletingName ?? '')}
+          onConfirm={() => {
+            if (!deletingName) return
+            const name = deletingName
+            setDeletingName(null)
+            void handleDelete(name)
+          }}
+        />
       </CollapsibleContent>
     </Collapsible>
   )
