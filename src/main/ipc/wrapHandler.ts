@@ -59,12 +59,19 @@ function logRedacted(err: unknown): void {
   }
 }
 
-/** Recognizes the SDK's two "it doesn't exist" shapes without importing their classes: a
- * management RestError with HTTP 404, or a ServiceBusError coded MessagingEntityNotFound. */
+/** Recognizes the "it doesn't exist" error shapes without importing SDK classes: a
+ * management RestError with HTTP 404 or a ServiceBusError coded MessagingEntityNotFound
+ * (real Azure), plus the emulator's own variant — its management API answers a missing
+ * entity with HTTP 200 and a RestError coded MessageEntityNotFoundError (pinned by
+ * adminHttpsProxy.integration.test.ts). */
 function isEntityNotFoundError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false
   const { statusCode, code } = err as { statusCode?: unknown; code?: unknown }
-  return statusCode === 404 || code === 'MessagingEntityNotFound'
+  return (
+    statusCode === 404 ||
+    code === 'MessagingEntityNotFound' ||
+    code === 'MessageEntityNotFoundError'
+  )
 }
 
 function formatZodError(err: ZodError): string {

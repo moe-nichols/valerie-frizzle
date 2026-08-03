@@ -50,6 +50,23 @@ describe('ConnectionManager', () => {
     expect(connectionManager.isConnected(profile.id)).toBe(false)
   })
 
+  test('disconnect issued during an in-flight connect still tears the connection down', async () => {
+    // Real-timing counterpart of the unit-level race test: connect spans several awaits
+    // (proxy bind, client construction, liveness check), so an immediate disconnect races
+    // it authentically here.
+    const profile = profilesRepo.create({
+      name: 'race profile',
+      connectionString: TEST_MESSAGING_CONNECTION_STRING,
+      managementPort: TEST_MANAGEMENT_PORT
+    })
+
+    const connecting = connectionManager.connect(profile.id)
+    const disconnecting = connectionManager.disconnect(profile.id)
+    await Promise.all([connecting, disconnecting])
+
+    expect(connectionManager.isConnected(profile.id)).toBe(false)
+  })
+
   test('connect throws a clear error for an unreachable management port', async () => {
     const profile = profilesRepo.create({
       name: 'unreachable profile',

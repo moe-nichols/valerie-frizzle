@@ -1,22 +1,7 @@
 import type { ServiceBusClient, ServiceBusReceivedMessage } from '@azure/service-bus'
 import { describe, expect, test } from 'vitest'
 import { MessagingService } from '../../src/main/services/messagingService'
-
-interface Deferred {
-  promise: Promise<void>
-  resolve: () => void
-  reject: (err: unknown) => void
-}
-
-function defer(): Deferred {
-  let resolve!: () => void
-  let reject!: (err: unknown) => void
-  const promise = new Promise<void>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
+import { type Deferred, defer } from './helpers/deferred'
 
 /** Minimal stand-in for a PeekLock receiver: records close() calls and lets each
  * settlement (completeMessage) be resolved on demand so overlapping settles can be

@@ -3,27 +3,25 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { AppError, type Result } from '../../src/shared/errors'
 
 const mocks = vi.hoisted(() => ({
-  handle: vi.fn(),
-  logError: vi.fn(),
-  logWarn: vi.fn(),
-  logDebug: vi.fn()
+  handle: vi.fn()
 }))
 
 vi.mock('electron', () => ({
   ipcMain: { handle: mocks.handle }
 }))
 
-vi.mock('electron-log/main', () => ({
-  default: { error: mocks.logError, warn: mocks.logWarn, debug: mocks.logDebug, info: vi.fn() }
-}))
+vi.mock('electron-log/main', async () =>
+  (await import('./helpers/electronLogMock')).electronLogModule()
+)
 
 import { registerHandler, toResult } from '../../src/main/ipc/wrapHandler'
+import { electronLog } from './helpers/electronLogMock'
 
 describe('toResult', () => {
   beforeEach(() => {
-    mocks.logError.mockClear()
-    mocks.logWarn.mockClear()
-    mocks.logDebug.mockClear()
+    electronLog.error.mockClear()
+    electronLog.warn.mockClear()
+    electronLog.debug.mockClear()
   })
 
   test('wraps a successful return value', async () => {
@@ -56,29 +54,42 @@ describe('toResult', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } })
   })
 
+  test("maps the emulator's MessageEntityNotFoundError RestError to NOT_FOUND", async () => {
+    // The emulator answers a missing entity with HTTP 200 and this code (confirmed by
+    // adminHttpsProxy.integration.test.ts) — neither of the real-Azure shapes.
+    const emulatorError = Object.assign(new Error('The messaging entity "x" could not be found'), {
+      code: 'MessageEntityNotFoundError',
+      statusCode: 200
+    })
+    const result = await toResult(() => {
+      throw emulatorError
+    })
+    expect(result).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } })
+  })
+
   test('maps any other thrown error to UNEXPECTED_ERROR and logs it at error level', async () => {
     const result = await toResult(() => {
       throw new Error('boom')
     })
     expect(result).toEqual({ ok: false, error: { code: 'UNEXPECTED_ERROR', message: 'boom' } })
-    expect(mocks.logError).toHaveBeenCalled()
+    expect(electronLog.error).toHaveBeenCalled()
   })
 
   test('logs NOT_CONNECTED at debug, not error — it is routine during background polling', async () => {
     await toResult(() => {
       throw new AppError('NOT_CONNECTED', 'profile is not connected: p1')
     })
-    expect(mocks.logDebug).toHaveBeenCalled()
-    expect(mocks.logWarn).not.toHaveBeenCalled()
-    expect(mocks.logError).not.toHaveBeenCalled()
+    expect(electronLog.debug).toHaveBeenCalled()
+    expect(electronLog.warn).not.toHaveBeenCalled()
+    expect(electronLog.error).not.toHaveBeenCalled()
   })
 
   test('logs other domain errors at warn — expected failures, not app faults', async () => {
     await toResult(() => {
       throw new AppError('NOT_FOUND', 'queue gone')
     })
-    expect(mocks.logWarn).toHaveBeenCalled()
-    expect(mocks.logError).not.toHaveBeenCalled()
+    expect(electronLog.warn).toHaveBeenCalled()
+    expect(electronLog.error).not.toHaveBeenCalled()
   })
 
   test('maps a thrown non-Error to UNEXPECTED_ERROR with its string form', async () => {

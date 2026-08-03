@@ -14,9 +14,9 @@ const mocks = vi.hoisted(() => {
   }
 })
 
-vi.mock('electron-log/main', () => ({
-  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-}))
+vi.mock('electron-log/main', async () =>
+  (await import('./helpers/electronLogMock')).electronLogModule()
+)
 
 vi.mock('../../src/main/services/adminHttpsProxy.ts', () => ({
   startAdminHttpsProxy: mocks.startAdminHttpsProxy,
