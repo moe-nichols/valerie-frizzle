@@ -1,12 +1,7 @@
+import { DEFAULT_THEME, type Theme } from '@shared/theme'
 import type { PreferencesRepo } from './db/preferencesRepo'
 
 const PREFERENCE_KEY = 'theme'
-
-export type Theme = 'light' | 'dark'
-
-// The app shipped dark-only (index.html sets class="dark"), so dark stays the default for
-// anything missing or malformed — matching the pre-toggle behavior.
-export const DEFAULT_THEME: Theme = 'dark'
 
 /** Pure — normalizes whatever's stored to a known theme, falling back to the default.
  * Kept separate from load/save so it's unit-testable without a database, mirroring

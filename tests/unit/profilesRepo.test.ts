@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { AppError } from '../../src/shared/errors'
 import { createDatabase } from '../../src/main/services/db/database'
 import { ProfilesRepo } from '../../src/main/services/db/profilesRepo'
+import { AppError } from '../../src/shared/errors'
 
 let tempDir: string
 let db: Database.Database

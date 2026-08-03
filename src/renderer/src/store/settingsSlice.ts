@@ -1,7 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { DEFAULT_POLL_INTERVAL_MS } from '@shared/pollInterval'
-
-type Theme = 'light' | 'dark'
+import { DEFAULT_THEME, type Theme } from '@shared/theme'
 
 interface SettingsState {
   // null until the initial load resolves, so usePolling correctly waits rather than
@@ -71,6 +70,11 @@ const settingsSlice = createSlice({
       })
       .addCase(fetchTheme.fulfilled, (state, action) => {
         state.theme = action.payload
+      })
+      .addCase(fetchTheme.rejected, (state) => {
+        // Same reasoning as the poll-interval fallback above: a failed load must not
+        // leave the "still loading" sentinel in place forever.
+        state.theme = DEFAULT_THEME
       })
       .addCase(updateTheme.fulfilled, (state, action) => {
         state.theme = action.payload
