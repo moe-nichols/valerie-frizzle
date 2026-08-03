@@ -127,9 +127,10 @@ integration tests) as plain TypeScript classes/functions against a real running 
 | `replayService.ts`                   | `resubmitMessage()` — moves a dead-lettered message back to its origin. Builds the resend envelope from the DTO the renderer already has (`buildResubmitEnvelope()`, pure), sends it, and only completes the DLQ original *after* the send succeeds.                                                                                            |
 | `windowState.ts`                     | Persists/restores the main window's size and position across launches. `parseWindowState()`/`clampToVisibleDisplay()` are pure (defensive against corrupted preference data and monitors that are no longer connected); load/save go through `PreferencesRepo`.                                                                                 |
 | `pollPreference.ts`                  | Persists/restores the user-configurable poll interval (queue/topic sync + message counts — see [Polling, not push](#polling-not-push)). `parsePollIntervalMs()`/`clampPollIntervalMs()` are pure, mirroring `windowState.ts`'s shape exactly; load/save go through `PreferencesRepo`.                                                          |
+| `themePreference.ts`                 | Persists/restores the light/dark theme choice (`preferences:theme:get`/`set`). Same pure-`parseTheme` + impure-load/save shape as `pollPreference.ts`; the `Theme` type and default live in `shared/theme.ts` so the renderer's `settingsSlice` shares one definition.                                                                          |
 | `db/database.ts`, `db/migrations.ts` | `better-sqlite3` connection + a small numbered-migration runner.                                                                                                                                                                                                                                                                                |
 | `db/profilesRepo.ts`                 | CRUD for saved connection profiles.                                                                                                                                                                                                                                                                                                             |
-| `db/preferencesRepo.ts`              | Generic key-value store — backs both `windowState.ts` and `pollPreference.ts`, and is the natural home for any future small piece of persisted app state.                                                                                                                                                                                       |
+| `db/preferencesRepo.ts`              | Generic key-value store — backs `windowState.ts`, `pollPreference.ts`, and `themePreference.ts`, and is the natural home for any future small piece of persisted app state.                                                                                                                                                                     |
 
 ### Admin API vs. messaging API, and the HTTPS proxy workaround
 
@@ -198,33 +199,49 @@ failed send.
 ```
 src/renderer/src/
   App.tsx                          # sidebar shell + which detail panel is showing
+  components/
+    ConfirmDialog.tsx              # the one confirmation dialog for destructive actions
+    FormDialog.tsx                 # the one dialog shell for IPC-backed forms (error alert, submit guard, success toast)
+    EmptyState.tsx                 # the muted "nothing here" one-liner
   lib/
     monaco.ts                      # Monaco worker setup, local-bundle loader config
     messageCount.ts                # shared peek-based count fetching (queues + subscriptions)
     usePolling.ts                  # interval + guarded manual refresh (one in-flight guard for both)
     useIsCurrent.ts                # stale-async-result predicate for the un-keyed panels
     useEntityCounts.ts             # per-entity count map with keep-previous-on-failure merging
+    useAsyncSubmit.ts              # form submission lifecycle: double-submit guard + error state
+    parseEnum.ts                   # narrows Select/RadioGroup string values without `as`-casts
   store/
     store.ts, hooks.ts             # configureStore + typed useAppDispatch/useAppSelector
     connectionsSlice.ts            # selected profile/queue/topic, connected/connecting ids
-    settingsSlice.ts               # poll interval
+    settingsSlice.ts               # poll interval + theme
   features/
     connections/
       ConnectionSidebar.tsx        # sidebar list: connect/disconnect/delete profiles
       AddConnectionDialog.tsx
     entities/
       EntityTree.tsx               # sidebar-nested queues/topics under the selected connection
+      EntityTreeSection.tsx        # one generic Queues/Topics section (header, rows, actions menu)
+      useEntityTreeData.ts         # the tree's data layer: listings + counts + polling, staleness-guarded
       CreateEntityDialog.tsx       # one parameterized add-queue/add-topic dialog
+      EditEntityDialogs.tsx        # edit queue/topic/subscription — configuration over one generic dialog
+      entityFields.tsx             # Text/Number/Checkbox field primitives for entity forms
+      entityForms.tsx              # FieldsState objects + field groups + DTO converters per entity kind
       useEntityPanel.ts            # shared panel scaffolding: poll wiring + reset-on-selection-change
+      PanelRefreshControls.tsx     # refresh button + "Updated {time}" pair for panel titles
+      EntityCountBadges.tsx        # active/DLQ count badge pair
       QueuePanel.tsx               # queue detail: status, purge, send/browse/DLQ
-      TopicPanel.tsx               # topic detail: status, send, subscriptions (+ their rules)
+      TopicPanel.tsx               # topic detail: status, send, subscriptions (+ their rules/messages)
       SubscriptionRules.tsx        # per-subscription SQL/correlation rule CRUD
+      SubscriptionMessages.tsx     # collapsible per-subscription message browser (+ its DLQ)
       QueuePurgeControl.tsx        # purge confirm → progress → dismiss; works for a queue or a DLQ
     messages/
       MessageComposer.tsx          # Monaco body editor (text/JSON/XML) + broker properties + app properties
-      MessageBrowser.tsx           # peek/receive table; optionally shows DLQ reason + Resubmit (see below)
+      MessageBrowser.tsx           # peek/receive state + toolbar; optionally resubmit-enabled (see below)
+      MessageTable.tsx             # the sortable results table + per-row settle actions
+      MessageDetailDialog.tsx      # read-only single-message inspection
     settings/
-      SettingsButton.tsx, SettingsDialog.tsx   # poll-interval preference
+      SettingsButton.tsx, SettingsDialog.tsx   # poll-interval + theme preferences
 ```
 
 Queues and topics are sidebar tree children of their connection (`EntityTree.tsx`,
@@ -313,8 +330,8 @@ touching related code, read the relevant one first.
 numbered-migration runner (`db/migrations.ts`) rather than a full migration framework —
 there are two tables (`connection_profiles`, `preferences`), so a heavier tool wasn't
 justified. `preferences` is a generic key-value store, currently holding the main
-window's size/position (`windowState.ts`) and the poll interval (`pollPreference.ts`);
-both follow the same shape — a pure `parseX`/`clampX` function the impure load/save
+window's size/position (`windowState.ts`), the poll interval (`pollPreference.ts`), and
+the theme (`themePreference.ts`); all follow the same shape — a pure `parseX`/`clampX` function the impure load/save
 wraps, defensive against missing, corrupted, or out-of-range saved data, unit-tested
 without a real database or Electron. Connection strings are stored in plaintext; the
 emulator's SAS key is a fixed, documented dev-only value, not a real secret, so this is
@@ -412,16 +429,17 @@ Beyond the Electron/Vite/React/TypeScript baseline, worth knowing *why* these ar
   needed (the `npm run rebuild` script exists only in case a future native dependency
   isn't N-API-based).
 - **`zod`** — runtime validation for every IPC request payload at the main-process
-  boundary; see [The IPC contract](#the-ipc-contract) above.
+  boundary; see [The IPC contract](#the-ipc-contract) above. Requests only, by design:
+  responses are produced by our own main process, so re-validating them would add cost
+  without a trust boundary to defend. Revisit if a contract-drift bug ever appears.
 - **`selfsigned`** — pure-JS self-signed certificate generation for
   `adminHttpsProxy.ts`'s local TLS termination; avoids shelling out to `openssl`.
 - **`electron-log`** — main-process-only file logging; see [Logging](#logging) above.
-- **Biome** — lint only (`formatter.enabled: false` in `biome.json`, so it never
-  reformats existing code). Chosen over ESLint because this project runs TypeScript 7,
-  which `typescript-eslint` doesn't yet support; Biome's parser is independent of the
-  installed TypeScript version. Note two deliberate relaxations in `biome.json`:
-  `a11y: none` (worth revisiting — the UI is built from accessible Radix primitives, but
-  nothing lints hand-written markup) and `noNonNullAssertion: off`.
+- **Biome** — linting, formatting, and import ordering (`npm run lint` runs
+  `biome check`; `npm run format` writes fixes). Chosen over ESLint because this project
+  runs TypeScript 7, which `typescript-eslint` doesn't yet support; Biome's parser is
+  independent of the installed TypeScript version. The a11y preset is `recommended`;
+  the one deliberate relaxation is `noNonNullAssertion: off`.
 - **Vitest** — both test tiers (see [Testing strategy](#testing-strategy) above).
 - **`playwright-core`** — not a test runner here; used for the throwaway
   `_electron.launch()` driver scripts that actually click through the built app during

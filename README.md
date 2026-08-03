@@ -21,6 +21,8 @@ This is a personal tool: no installer, code signing, or auto-update by design.
   messages are currently sitting in it.
 - **Configurable poll rate** — set from a Settings dialog (gear icon in the sidebar
   footer) and persisted across restarts.
+- **Light/dark theme** — toggled from the same Settings dialog, applied immediately
+  (including the Monaco message editor) and persisted across restarts.
 - **Sending messages** — text/JSON/XML bodies with custom broker properties
   (content type, label, correlation ID, TTL, application properties) via a Monaco-based
   editor.
