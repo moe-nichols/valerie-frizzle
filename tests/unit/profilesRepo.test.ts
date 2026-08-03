@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { AppError } from '../../src/shared/errors'
 import { createDatabase } from '../../src/main/services/db/database'
 import { ProfilesRepo } from '../../src/main/services/db/profilesRepo'
 
@@ -55,8 +56,15 @@ describe('ProfilesRepo', () => {
     expect(updated.updatedAt).toBeGreaterThan(created.updatedAt)
   })
 
-  test('update throws for an unknown id', () => {
-    expect(() => repo.update('does-not-exist', { name: 'x' })).toThrow(/not found/)
+  test('update throws NOT_FOUND for an unknown id so the renderer sees the right code', () => {
+    let thrown: unknown
+    try {
+      repo.update('does-not-exist', { name: 'x' })
+    } catch (err) {
+      thrown = err
+    }
+    expect(thrown).toBeInstanceOf(AppError)
+    expect((thrown as AppError).code).toBe('NOT_FOUND')
   })
 
   test('delete removes the profile', () => {

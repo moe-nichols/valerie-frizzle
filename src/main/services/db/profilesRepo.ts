@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { ConnectionProfile } from '@shared/domain'
+import { AppError } from '@shared/errors'
 import type { Database } from 'better-sqlite3'
 
 interface ProfileRow {
@@ -74,7 +75,7 @@ export class ProfilesRepo {
   update(id: string, input: UpdateProfileInput): ConnectionProfile {
     const existing = this.get(id)
     if (!existing) {
-      throw new Error(`profile not found: ${id}`)
+      throw new AppError('NOT_FOUND', `profile not found: ${id}`)
     }
     const updated: ConnectionProfile = {
       ...existing,
