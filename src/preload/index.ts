@@ -89,6 +89,10 @@ const api = {
         profileId: string,
         input: IpcChannels['entities:rules:create']['request']['input']
       ) => invoke('entities:rules:create', { profileId, input }),
+      update: (
+        profileId: string,
+        input: IpcChannels['entities:rules:update']['request']['input']
+      ) => invoke('entities:rules:update', { profileId, input }),
       delete: (profileId: string, topicName: string, subscriptionName: string, name: string) =>
         invoke('entities:rules:delete', { profileId, topicName, subscriptionName, name })
     }

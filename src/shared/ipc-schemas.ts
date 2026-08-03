@@ -120,11 +120,14 @@ const ruleFilter = z.discriminatedUnion('type', [
   })
 ])
 
+const ruleAction = z.object({ sqlExpression: nonEmptyString })
+
 const createRuleInput = z.object({
   topicName: nonEmptyString,
   subscriptionName: nonEmptyString,
   name: nonEmptyString,
-  filter: ruleFilter
+  filter: ruleFilter,
+  action: ruleAction.optional()
 })
 
 export const ipcRequestSchemas: {
@@ -203,6 +206,7 @@ export const ipcRequestSchemas: {
     subscriptionName: nonEmptyString
   }),
   'entities:rules:create': z.object({ profileId: nonEmptyString, input: createRuleInput }),
+  'entities:rules:update': z.object({ profileId: nonEmptyString, input: createRuleInput }),
   'entities:rules:delete': z.object({
     profileId: nonEmptyString,
     topicName: nonEmptyString,

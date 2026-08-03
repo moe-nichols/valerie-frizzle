@@ -124,11 +124,17 @@ export interface CorrelationRuleFilterInput {
 
 export type RuleFilterInput = SqlRuleFilterInput | CorrelationRuleFilterInput
 
+/** A rule's optional SQL action, applied to messages the filter matches. */
+export interface SqlRuleActionInput {
+  sqlExpression: string
+}
+
 export interface RuleDescription {
   topicName: string
   subscriptionName: string
   name: string
   filter: RuleFilterInput
+  action?: SqlRuleActionInput
 }
 
 export interface CreateRuleInput {
@@ -136,6 +142,16 @@ export interface CreateRuleInput {
   subscriptionName: string
   name: string
   filter: RuleFilterInput
+  action?: SqlRuleActionInput
+}
+
+/** Replaces a rule's filter (and action) in place; the rule is identified by `name`. */
+export interface UpdateRuleInput {
+  topicName: string
+  subscriptionName: string
+  name: string
+  filter: RuleFilterInput
+  action?: SqlRuleActionInput
 }
 
 export type ApplicationPropertyValue = string | number | boolean

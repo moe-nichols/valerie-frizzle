@@ -12,6 +12,7 @@ import type {
   UpdateSubscriptionInput,
   RuleDescription,
   CreateRuleInput,
+  UpdateRuleInput,
   MessageEnvelope,
   ReceivedMessageDescription,
   ReceiveMode
@@ -134,6 +135,10 @@ export interface IpcChannels {
   }
   'entities:rules:create': {
     request: { profileId: string; input: CreateRuleInput }
+    response: Result<RuleDescription>
+  }
+  'entities:rules:update': {
+    request: { profileId: string; input: UpdateRuleInput }
     response: Result<RuleDescription>
   }
   'entities:rules:delete': {
