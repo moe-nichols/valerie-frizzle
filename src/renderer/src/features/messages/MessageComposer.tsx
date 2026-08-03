@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
+import { useAppSelector } from '@renderer/store/hooks'
 import type { ApplicationPropertyValue, MessageEnvelope } from '@shared/domain'
 import { type FormEvent, useState } from 'react'
 
@@ -56,6 +57,7 @@ export function MessageComposer({
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [sentAt, setSentAt] = useState<string | null>(null)
+  const appTheme = useAppSelector((state) => state.settings.theme)
 
   function handleAddProperty(): void {
     setProperties((prev) => [...prev, { key: '', value: '' }])
@@ -132,7 +134,7 @@ export function MessageComposer({
       <div data-testid="message-body-editor" className="overflow-hidden rounded-md border">
         <Editor
           height="200px"
-          theme="vs-dark"
+          theme={appTheme === 'light' ? 'light' : 'vs-dark'}
           language={MONACO_LANGUAGE_BY_MODE[bodyMode]}
           value={body}
           onChange={(value) => setBody(value ?? '')}
