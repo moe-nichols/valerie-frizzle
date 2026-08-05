@@ -13,3 +13,16 @@ files:
   - '!biome.json'
   - '!components.json'
   - '!{docker,scripts,tests,plan}/**'
+# No custom icons exist in the repo — electron-builder falls back to its own default icon
+# on both platforms. Adding real branded icons is a separate, design-driven task.
+# Signing/notarization are intentionally left unset: an unsigned .exe trips SmartScreen and
+# an unsigned .dmg/.app trips Gatekeeper (right-click → Open, or `xattr -cr` on first
+# launch). Expected and acceptable for a personal tool.
+mac:
+  target: dmg
+  category: public.app-category.developer-tools
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

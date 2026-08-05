@@ -29,6 +29,27 @@ type ReceiverTarget =
   | { entityPath: string }
   | { topicName: string; subscriptionName: string; deadLetter?: boolean }
 
+/**
+ * Recognizes the "can't browse an auto-forwarding entity" failure without importing SDK
+ * classes. Peeking/browsing an entity with auto-forwarding enabled is a permanent Service
+ * Bus limitation (not an emulator quirk). The SDK surfaces it as a ServiceBusError whose
+ * `code` is the generic `GeneralError` (it maps the AMQP `amqp:not-allowed` /
+ * `InvalidOperationError` reason down to `GeneralError` and prefixes the real reason onto
+ * the message — confirmed by reading @azure/service-bus's serviceBusError.js), so the
+ * message text is the reliable discriminator, not `code`.
+ */
+function isAutoForwardBrowseError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  const { message } = err as { message?: unknown }
+  return typeof message === 'string' && /auto-forwarding/i.test(message)
+}
+
+function describeTarget(target: ReceiverTarget): string {
+  if ('entityPath' in target) return target.entityPath
+  const suffix = target.deadLetter ? ' (DLQ)' : ''
+  return `${target.topicName}/${target.subscriptionName}${suffix}`
+}
+
 function stringifyBody(body: unknown): string {
   if (typeof body === 'string') return body
   if (body === null || body === undefined) return ''
@@ -149,6 +170,17 @@ export class MessagingService {
           fromSequenceNumber !== undefined ? Long.fromNumber(fromSequenceNumber) : undefined
       })
       return project(messages)
+    } catch (err) {
+      // Defense in depth: the renderer already skips the count for auto-forwarding entities
+      // (it reads forwardTo — see EntityCountBadges/useEntityTreeData), but if any path still
+      // peeks one, turn the SDK's opaque error into a clear, actionable one. Mirrors
+      // drainReceiver's explicit catch/close/rethrow rather than relying on `finally` alone.
+      if (isAutoForwardBrowseError(err)) {
+        throw new Error(
+          `Cannot browse messages on "${describeTarget(target)}": it has auto-forwarding enabled, which Service Bus does not allow peeking.`
+        )
+      }
+      throw err
     } finally {
       await receiver.close()
     }

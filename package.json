@@ -8,6 +8,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "build:unpacked": "electron-vite build && electron-builder --dir",
+    "build:mac": "electron-vite build && electron-builder --mac",
+    "build:win": "electron-vite build && electron-builder --win",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --config vitest.config.ts",

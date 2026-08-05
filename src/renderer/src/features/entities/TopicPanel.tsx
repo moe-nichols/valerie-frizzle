@@ -89,15 +89,23 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     if (!response.ok) return response.error.message
     setSubscriptions(response.data)
 
-    const names = response.data.map((subscription) => subscription.subscriptionName)
+    // An auto-forwarding subscription can't be peeked (a permanent Service Bus limitation),
+    // so skip its count fetch; the badge shows "forwarding" instead (see EntityCountBadges).
+    // The DLQ is gated on its own forwardDeadLetteredMessagesTo, independent of forwardTo.
+    const activeCountNames = response.data
+      .filter((subscription) => !subscription.forwardTo)
+      .map((subscription) => subscription.subscriptionName)
+    const dlqCountNames = response.data
+      .filter((subscription) => !subscription.forwardDeadLetteredMessagesTo)
+      .map((subscription) => subscription.subscriptionName)
     await Promise.all([
       updateSubscriptionCounts(
-        names,
+        activeCountNames,
         (name) => fetchSubscriptionMessageCount(profileId, topicName, name),
         isCurrent
       ),
       updateSubscriptionDlqCounts(
-        names,
+        dlqCountNames,
         (name) => fetchSubscriptionMessageCount(profileId, topicName, name, true),
         isCurrent
       )
@@ -201,6 +209,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                     active={subscriptionCounts[subscription.subscriptionName]}
                     deadLetter={subscriptionDlqCounts[subscription.subscriptionName]}
                     activeSuffix=" active"
+                    forwarding={Boolean(subscription.forwardTo)}
                   />
                   <Button
                     variant="outline"

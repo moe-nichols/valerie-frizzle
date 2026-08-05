@@ -1,6 +1,22 @@
 # Plan: Fix Service Bus RestError/AggregateError + add real mac/win packaging targets
 
-Status: **not started** — written 2026-08-04, to be executed later.
+Status: **executed** — 2026-08-04. Done: Step 1 (logging), Step 2 (live repro against the
+Docker emulator), the `forwardTo` mapping of Step 3, Step 4 (renderer skip + badge +
+`withPeekedBatch` hardening), Step 5 unit + integration regression tests, and the full
+packaging section (mac `.dmg` verified locally; `build:win` still needs a Windows box).
+**Step 2 disproved the plan's RestError hypothesis** (see below), so the malformed-XML branch
+of Step 3 was intentionally NOT written. Remaining items are judgment calls, not blocked
+work: the retry-vs-throttle decision behind the `AggregateError` (its identity is still
+unknown — Step 1's logging will surface it on recurrence) and running `build:win` on Windows.
+See "Execution notes" at the bottom.
+
+One correction from reading the SDK during execution: the plan's "recognize
+`InvalidOperationError` by `err.code`" is wrong for the peek path — @azure/service-bus maps
+that AMQP reason down to `code: "GeneralError"` and prefixes the reason onto the *message*,
+so `withPeekedBatch` discriminates on the message text (`/auto-forwarding/i`), not `code`.
+Also, only `QueueProperties`/`SubscriptionProperties` carry `forwardTo` — `TopicProperties`
+does not — so `toTopicDescription` was left unchanged (the plan's mention of it was
+imprecise).
 
 ## Context
 
@@ -186,3 +202,50 @@ above platform caveat.
   fix plus a recurrence (or Step 2's concurrency-burst repro attempt) is what will surface it.
 - Whether to retry in `withPeekedBatch` vs. throttle `useEntityCounts`'s polling burst (Step 4) — depends
   on what Step 2 finds.
+
+## Execution notes (2026-08-04)
+
+What shipped:
+- **Step 1**: `wrapHandler.ts` now unwraps `AggregateError.errors` — `logRedacted` logs each
+  inner error (`name [code]: message`, still redacted) and `toResult` folds the inner detail
+  into the (otherwise empty) `UNEXPECTED_ERROR` message. No new `IpcErrorCode`. Tests added.
+- **Step 3 (forwardTo half only)**: `forwardTo`/`forwardDeadLetteredMessagesTo` added to
+  `QueueDescription`/`SubscriptionDescription` and mapped in `adminService`. The
+  malformed-XML RestError branch was **not** implemented — its cause is still unconfirmed and
+  needs the Step 2 repro.
+- **Step 4**: renderer skips the peek-based count for any queue/subscription with `forwardTo`
+  set and shows a "forwarding" badge (`EntityCountBadges`, `useEntityTreeData`, `EntityTree`,
+  `TopicPanel`); DLQ counts gated separately on `forwardDeadLetteredMessagesTo`.
+  `withPeekedBatch` now catches/translates the auto-forwarding browse error and closes the
+  receiver explicitly (mirrors `drainReceiver`). Tests added.
+- **Packaging**: `mac` (dmg) + `win` (nsis, non-oneClick) targets in `electron-builder.yml`,
+  `build:mac`/`build:win` scripts, README rewritten. `npm run build:mac` verified locally —
+  produced `dist/SB Emulator Manager-0.1.0-arm64.dmg` (unsigned, default icon, as designed).
+
+Verified: `npm run typecheck`, `npm run lint` (clean; the one pre-existing `sidebar.tsx`
+warning is untouched), `npm run test:unit` (151 passing).
+
+Step 2 findings (live emulator, 2026-08-04 — `servicebus-emulator:latest`):
+- **The RestError hypothesis is disproved.** `getQueue`/`listQueues`/`getSubscription`/
+  `listSubscriptions` on a runtime-created `forwardTo` entity all succeed and return
+  `forwardTo` populated (as the target's full `sb://…` address). No RestError, no unparseable
+  XML. The production RestError's real cause is therefore *not* forwarding entities and
+  remains unexplained — Step 1's richer logging is now the mechanism to catch it if it recurs.
+  Because there's nothing to work around, the Step 3 malformed-XML catch was **not** written.
+- **The forwarding-peek limitation is confirmed.** A raw SDK `receiver.peekMessages()` on a
+  forwarding queue/subscription rejects with a message containing "auto-forwarding", which is
+  exactly what `withPeekedBatch` detects — verified end-to-end, translation fired against the
+  real error. Pinned in `tests/integration/forwardingEntities.integration.test.ts` (8 tests,
+  passing), including a raw-SDK assertion so a future wording change is caught.
+- The `AggregateError`'s identity was **not** reproduced (it's a genuinely transient
+  retry-exhaustion; a concurrency burst wouldn't reproduce it deterministically). Left to
+  Step 1's logging.
+
+Still to do (not blocked — judgment/environment):
+- The retry-vs-throttle decision for the `AggregateError` (Step 4 open question) — wait for
+  Step 1's logging to reveal its identity on recurrence before deciding.
+- `npm run build:win` on a Windows machine to confirm the NSIS installer.
+
+Verified live: `npm run test:integration` (8 files, 55 tests passing, including the new
+forwarding regression suite). `testClient.ts` now also exposes the raw `adminClient` for
+tests that need entity shapes the DTOs don't model.

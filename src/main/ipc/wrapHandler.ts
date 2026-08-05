@@ -29,7 +29,14 @@ export async function toResult<T>(fn: () => Promise<T> | T): Promise<Result<T>> 
     if (isEntityNotFoundError(err)) {
       return { ok: false, error: { code: 'NOT_FOUND', message } }
     }
-    return { ok: false, error: { code: 'UNEXPECTED_ERROR', message } }
+    // AggregateError still maps to UNEXPECTED_ERROR (no renderer-visible differentiation is
+    // needed yet, and IpcErrorCode is a closed, exhaustively-consumed union — see
+    // shared/errors.ts), but its outer message is empty; fold in the inner detail so the
+    // renderer surface and the log line are actually diagnosable.
+    return {
+      ok: false,
+      error: { code: 'UNEXPECTED_ERROR', message: enrichAggregateMessage(err, message) }
+    }
   }
 }
 
@@ -57,6 +64,44 @@ function logRedacted(err: unknown): void {
   } else {
     log[level](redactSecrets(String(err)))
   }
+  // An AggregateError's own message/stack are empty — the real detail (and any embedded
+  // connection string) lives in `.errors`. Log each inner error at the same level, still
+  // redacted, so a retry-exhaustion failure is diagnosable instead of a blank line.
+  const inner = aggregateInnerErrors(err)
+  if (inner) {
+    for (const innerError of inner) {
+      const stack = innerError instanceof Error ? redactSecrets(innerError.stack ?? '') : ''
+      log[level](`  ↳ ${describeInnerError(innerError)}`, stack)
+    }
+  }
+}
+
+/** AggregateError (and duck-typed lookalikes carrying an `errors` array — the SDK's retry
+ * helper produces this shape when multiple attempts fail) hides its real detail in
+ * `.errors`. Returns those inner errors when present, else undefined. */
+function aggregateInnerErrors(err: unknown): unknown[] | undefined {
+  if (typeof err !== 'object' || err === null) return undefined
+  const { errors } = err as { errors?: unknown }
+  return Array.isArray(errors) && errors.length > 0 ? errors : undefined
+}
+
+/** One redacted, single-line summary per inner error: `name [code]: message`. */
+function describeInnerError(err: unknown): string {
+  if (err instanceof Error) {
+    const code = (err as { code?: unknown }).code
+    const codePart = code != null ? ` [${String(code)}]` : ''
+    return redactSecrets(`${err.name}${codePart}: ${err.message}`)
+  }
+  return redactSecrets(String(err))
+}
+
+/** Folds an AggregateError's inner detail into the (otherwise empty) outer message so the
+ * renderer-facing message isn't blank. Non-aggregate errors pass through unchanged. */
+function enrichAggregateMessage(err: unknown, message: string): string {
+  const inner = aggregateInnerErrors(err)
+  if (!inner) return message
+  const details = inner.map(describeInnerError).join('; ')
+  return message ? `${message} (${details})` : details
 }
 
 /** Recognizes the "it doesn't exist" error shapes without importing SDK classes: a
