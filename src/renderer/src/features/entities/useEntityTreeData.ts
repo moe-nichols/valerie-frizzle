@@ -69,11 +69,24 @@ export function useEntityTreeData(profileId: string): {
     let nextError: string | null = null
     if (queuesResponse.ok) {
       setQueues(queuesResponse.data)
-      const queueNames = queuesResponse.data.map((queue) => queue.name)
+      // An auto-forwarding entity can't be peeked (a permanent Service Bus limitation), so
+      // skip its count fetch entirely rather than letting every poll throw on it — the badge
+      // shows "forwarding" instead (see EntityCountBadges). The DLQ is gated on its own
+      // forwardDeadLetteredMessagesTo, since a queue can forward one and not the other.
+      const activeCountNames = queuesResponse.data
+        .filter((queue) => !queue.forwardTo)
+        .map((queue) => queue.name)
+      const dlqCountNames = queuesResponse.data
+        .filter((queue) => !queue.forwardDeadLetteredMessagesTo)
+        .map((queue) => queue.name)
       await Promise.all([
-        updateQueueCounts(queueNames, (name) => fetchQueueMessageCount(profileId, name), isCurrent),
+        updateQueueCounts(
+          activeCountNames,
+          (name) => fetchQueueMessageCount(profileId, name),
+          isCurrent
+        ),
         updateQueueDlqCounts(
-          queueNames,
+          dlqCountNames,
           (name) => fetchQueueDeadLetterCount(profileId, buildDeadLetterQueuePath(name)),
           isCurrent
         )

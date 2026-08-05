@@ -92,6 +92,38 @@ describe('toResult', () => {
     expect(electronLog.error).not.toHaveBeenCalled()
   })
 
+  test('unwraps an AggregateError so its inner detail reaches the message and the log', async () => {
+    // An AggregateError's own message/stack are empty — the real detail lives in `.errors`,
+    // which today's log silently drops. It still maps to UNEXPECTED_ERROR, but the message
+    // must now carry the unwrapped inner detail.
+    const inner1 = Object.assign(new Error('link detached'), { code: 'ServiceCommunicationError' })
+    const inner2 = new Error('socket hang up')
+    const result = await toResult(() => {
+      throw new AggregateError([inner1, inner2])
+    })
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'UNEXPECTED_ERROR' } })
+    if (result.ok) throw new Error('expected an error result')
+    expect(result.error.message).toContain('ServiceCommunicationError')
+    expect(result.error.message).toContain('link detached')
+    expect(result.error.message).toContain('socket hang up')
+    // The outer message is empty, so without unwrapping the log line would be blank.
+    expect(electronLog.error).toHaveBeenCalled()
+    const logged = electronLog.error.mock.calls.flat().join(' ')
+    expect(logged).toContain('ServiceCommunicationError')
+  })
+
+  test('redacts a connection-string secret nested inside an AggregateError inner error', async () => {
+    const inner = new Error('connect failed: Endpoint=sb://localhost;SharedAccessKey=supersecret;')
+    await toResult(() => {
+      throw new AggregateError([inner])
+    })
+
+    const logged = electronLog.error.mock.calls.flat().join(' ')
+    expect(logged).toContain('SharedAccessKey=<redacted>')
+    expect(logged).not.toContain('supersecret')
+  })
+
   test('maps a thrown non-Error to UNEXPECTED_ERROR with its string form', async () => {
     const result = await toResult(() => {
       // eslint-disable-next-line @typescript-eslint/only-throw-error

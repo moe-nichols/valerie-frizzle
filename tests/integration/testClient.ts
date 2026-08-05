@@ -14,6 +14,9 @@ import { TEST_MANAGEMENT_PORT, TEST_MESSAGING_CONNECTION_STRING } from './harnes
 export interface TestEmulatorClient {
   proxy: AdminHttpsProxy
   adminService: AdminService
+  /** The raw SDK admin client behind `adminService`, exposed for the few tests that need to
+   * provision entity shapes `AdminService`'s DTOs don't model (e.g. `forwardTo`). */
+  adminClient: ServiceBusAdministrationClient
   sbClient: ServiceBusClient
   messagingService: MessagingService
   close(): Promise<void>
@@ -35,6 +38,7 @@ export async function connectToTestEmulator(): Promise<TestEmulatorClient> {
   return {
     proxy,
     adminService: new AdminService(adminClient),
+    adminClient,
     sbClient,
     messagingService,
     async close() {

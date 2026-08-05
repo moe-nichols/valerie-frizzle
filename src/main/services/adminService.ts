@@ -36,7 +36,11 @@ function toQueueDescription(props: QueueProperties): QueueDescription {
     requiresSession: props.requiresSession,
     deadLetteringOnMessageExpiration: props.deadLetteringOnMessageExpiration,
     maxDeliveryCount: props.maxDeliveryCount,
-    status: props.status
+    status: props.status,
+    // Auto-forwarding makes an entity un-peekable; the renderer needs these to skip the
+    // peek-based count and badge the entity instead of erroring on it (see domain.ts).
+    forwardTo: props.forwardTo,
+    forwardDeadLetteredMessagesTo: props.forwardDeadLetteredMessagesTo
   }
 }
 
@@ -60,7 +64,10 @@ function toSubscriptionDescription(props: SubscriptionProperties): SubscriptionD
     requiresSession: props.requiresSession,
     deadLetteringOnMessageExpiration: props.deadLetteringOnMessageExpiration,
     maxDeliveryCount: props.maxDeliveryCount,
-    status: props.status
+    status: props.status,
+    // See toQueueDescription — a subscription can auto-forward too.
+    forwardTo: props.forwardTo,
+    forwardDeadLetteredMessagesTo: props.forwardDeadLetteredMessagesTo
   }
 }
 

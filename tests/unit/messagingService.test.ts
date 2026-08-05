@@ -12,11 +12,17 @@ class FakeReceiver {
 
   constructor(
     private messages: ServiceBusReceivedMessage[],
-    private receiveError?: Error
+    private receiveError?: Error,
+    private peekError?: Error
   ) {}
 
   async receiveMessages(): Promise<ServiceBusReceivedMessage[]> {
     if (this.receiveError) throw this.receiveError
+    return this.messages
+  }
+
+  async peekMessages(): Promise<ServiceBusReceivedMessage[]> {
+    if (this.peekError) throw this.peekError
     return this.messages
   }
 
@@ -151,5 +157,33 @@ describe('MessagingService PeekLock receiver lifecycle', () => {
     await settle
 
     await expect(service.completeMessage(only.handleId!)).rejects.toThrow('no such message handle')
+  })
+})
+
+describe('MessagingService withPeekedBatch', () => {
+  test('translates an auto-forwarding browse error into a clear message and closes the receiver', async () => {
+    // The SDK reports this as a ServiceBusError whose `code` is the generic "GeneralError"
+    // with the real reason prefixed onto the message, so the message text — not `code` — is
+    // the reliable discriminator (see isAutoForwardBrowseError in messagingService.ts).
+    const forwardError = Object.assign(
+      new Error(
+        'InvalidOperationError: Cannot create a message browser on an entity with auto-forwarding enabled.'
+      ),
+      { name: 'ServiceBusError', code: 'GeneralError' }
+    )
+    const receiver = new FakeReceiver([], undefined, forwardError)
+    const service = makeService(receiver)
+
+    await expect(service.countMessages('q', 250, 0)).rejects.toThrow(/auto-forwarding enabled/i)
+    expect(receiver.closeCount).toBe(1)
+  })
+
+  test('rethrows a non-forwarding peek error (e.g. an AggregateError) unchanged, still closing the receiver', async () => {
+    const aggregate = new AggregateError([new Error('socket hang up')], 'retry exhausted')
+    const receiver = new FakeReceiver([], undefined, aggregate)
+    const service = makeService(receiver)
+
+    await expect(service.countMessages('q', 250, 0)).rejects.toBe(aggregate)
+    expect(receiver.closeCount).toBe(1)
   })
 })

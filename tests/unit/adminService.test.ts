@@ -40,6 +40,33 @@ describe('AdminService list mapping', () => {
     // The DTO must not leak SDK-only fields.
     expect(Object.keys(queues[0])).not.toContain('authorizationRules')
   })
+
+  test('maps forwardTo / forwardDeadLetteredMessagesTo onto the queue DTO', async () => {
+    // The renderer needs these to skip the (impossible) peek-based count for an
+    // auto-forwarding entity and badge it instead — see EntityCountBadges/useEntityTreeData.
+    const client = {
+      listQueues: () =>
+        asyncIterableOf([
+          queueProps({ forwardTo: 'dest-queue', forwardDeadLetteredMessagesTo: 'dlq-dest' })
+        ])
+    } as unknown as ServiceBusAdministrationClient
+
+    const [queue] = await new AdminService(client).listQueues()
+
+    expect(queue.forwardTo).toBe('dest-queue')
+    expect(queue.forwardDeadLetteredMessagesTo).toBe('dlq-dest')
+  })
+
+  test('leaves forwardTo undefined for a non-forwarding queue', async () => {
+    const client = {
+      listQueues: () => asyncIterableOf([queueProps()])
+    } as unknown as ServiceBusAdministrationClient
+
+    const [queue] = await new AdminService(client).listQueues()
+
+    expect(queue.forwardTo).toBeUndefined()
+    expect(queue.forwardDeadLetteredMessagesTo).toBeUndefined()
+  })
 })
 
 describe('AdminService merged updates', () => {

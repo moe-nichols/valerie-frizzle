@@ -4,7 +4,9 @@ A personal desktop GUI for managing a locally-running **Azure Service Bus emulat
 (Microsoft's official Docker-based emulator). This targets the emulator only — not real
 Azure, and not other brokers (Kafka, RabbitMQ, etc).
 
-This is a personal tool: no installer, code signing, or auto-update by design.
+This is a personal tool: it builds real macOS/Windows installers (see
+[Building installable packages](#building-installable-packages)), but with no code signing,
+notarization, or auto-update by design.
 
 ## Features
 
@@ -95,15 +97,24 @@ npm run test:integration  # spins up the emulator via Docker Compose, runs again
                            # tears it down afterward — requires a running container runtime
 ```
 
-## Building a local unpacked build
+## Building installable packages
 
 ```sh
-npm run build:unpacked
+npm run build:mac       # produces a .dmg under dist/  (must run on a Mac)
+npm run build:win       # produces an NSIS .exe installer under dist/
+npm run build:unpacked  # unsigned, unpackaged --dir build for quick local iteration
 ```
 
-Produces an unsigned, double-clickable `.app` (macOS) under `dist/`. There's no code
-signing, installer, or auto-update — this is a personal tool, not something distributed
-to other users, so none of that machinery exists.
+**Platform caveat:** electron-builder's mac `dmg` target cannot be cross-built from
+Windows — producing the macOS artifact means running `npm run build:mac` on an actual Mac.
+`npm run build:win` can run on Windows directly. There's no CI in this repo, so each
+platform's artifact is built on that platform.
+
+These builds are **unsigned** and use electron-builder's default icon (no branded icons
+exist in the repo yet). An unsigned `.exe` trips Windows SmartScreen; an unsigned
+`.dmg`/`.app` trips macOS Gatekeeper (right-click → Open, or `xattr -cr` the app on first
+launch). This is expected and acceptable for a personal tool — there's no code signing,
+notarization, or auto-update.
 
 ---
 

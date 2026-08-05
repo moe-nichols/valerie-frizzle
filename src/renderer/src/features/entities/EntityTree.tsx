@@ -84,6 +84,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
           <EntityCountBadges
             active={queueCounts[queue.name]}
             deadLetter={queueDlqCounts[queue.name]}
+            forwarding={Boolean(queue.forwardTo)}
           />
         )}
       />

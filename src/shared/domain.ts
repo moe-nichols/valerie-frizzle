@@ -34,6 +34,14 @@ export interface QueueDescription {
   deadLetteringOnMessageExpiration: boolean
   maxDeliveryCount: number
   status: EntityStatus
+  /**
+   * When set, the broker auto-forwards messages arriving here to another entity. Such an
+   * entity cannot be peeked/browsed at all (a permanent Service Bus limitation, not an
+   * emulator quirk), so the renderer skips the peek-based message count for it and shows a
+   * "forwarding" badge instead. `forwardDeadLetteredMessagesTo` is the same for its DLQ.
+   */
+  forwardTo?: string
+  forwardDeadLetteredMessagesTo?: string
 }
 
 export interface CreateQueueInput {
@@ -89,6 +97,10 @@ export interface SubscriptionDescription {
   deadLetteringOnMessageExpiration: boolean
   maxDeliveryCount: number
   status: EntityStatus
+  /** See {@link QueueDescription.forwardTo} — a subscription can auto-forward too, and is
+   * likewise un-peekable when it does. */
+  forwardTo?: string
+  forwardDeadLetteredMessagesTo?: string
 }
 
 export interface CreateSubscriptionInput {
