@@ -122,7 +122,10 @@ export class MessagingService {
     const sender = this.client.createSender(entityPath)
     try {
       await sender.sendMessages({
-        body: envelope.body,
+        // The SDK's default data transformer JSON.stringify()s any non-Buffer body
+        // (including strings) before writing the AMQP data section, which would
+        // double-encode text/json/xml bodies alike. Passing a Buffer bypasses that.
+        body: Buffer.from(envelope.body, 'utf8'),
         contentType: envelope.contentType,
         subject: envelope.subject,
         correlationId: envelope.correlationId,
@@ -144,11 +147,15 @@ export class MessagingService {
   /** The one place a receiver is constructed — every peek/count/receive pair differs
    * only in this addressing (see {@link ReceiverTarget}). */
   private openReceiver(target: ReceiverTarget, mode?: ReceiveMode): ServiceBusReceiver {
+    // Bodies are always sent as raw Buffers (see sendMessage), so skip the SDK's
+    // JSON.parse() attempt on receive too — otherwise a JSON-shaped body would come
+    // back as a parsed object instead of the original raw string.
+    const options = { ...(mode ? { receiveMode: mode } : {}), skipParsingBodyAsJson: true }
     if ('entityPath' in target) {
-      return this.client.createReceiver(target.entityPath, mode ? { receiveMode: mode } : undefined)
+      return this.client.createReceiver(target.entityPath, options)
     }
     return this.client.createReceiver(target.topicName, target.subscriptionName, {
-      ...(mode ? { receiveMode: mode } : {}),
+      ...options,
       ...(target.deadLetter ? { subQueueType: 'deadLetter' as const } : {})
     })
   }
