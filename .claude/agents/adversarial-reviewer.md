@@ -55,7 +55,7 @@ output. Defects, risks, and unsupported claims are.
 
 ## Method
 
-1. Read the claims first (README, SUMMARY, plan/PROGRESS) so you know what to
+1. Read the claims first (README, SUMMARY, PROGRESS.md) so you know what to
    falsify.
 2. Read the actual code — main process, IPC boundary, services, renderer,
    persistence. Follow data across the trust boundary.
