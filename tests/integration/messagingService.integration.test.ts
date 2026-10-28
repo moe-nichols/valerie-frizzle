@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import type { AdminService } from '../../src/main/services/adminService'
 import type { MessagingService } from '../../src/main/services/messagingService'
+import { buildDeadLetterQueuePath } from '@shared/domain.ts'
 import { connectToTestEmulator, type TestEmulatorClient } from './testClient'
 
 let client: TestEmulatorClient
@@ -223,12 +224,42 @@ describe('MessagingService — count methods', () => {
     expect(await messagingService.countMessages(countQueueName, 2, 0)).toBe(2)
   })
 
+  test('explicit queue browsing continues across interleaved count observations', async () => {
+    const first = await messagingService.peekMessages(countQueueName, 1, 0)
+    expect(first).toHaveLength(1)
+    expect(await messagingService.countMessages(countQueueName, 250, 0)).toBe(3)
+    const next = await messagingService.peekMessages(countQueueName, 1, first[0].sequenceNumber + 1)
+    expect(next).toHaveLength(1)
+    expect(next[0].messageId).not.toBe(first[0].messageId)
+    expect(await messagingService.countMessages(countQueueName, 250, 0)).toBe(3)
+  })
+
+  test('queue DLQ counts are non-destructive and independent of active counts', async () => {
+    const name = `test-count-dlq-${Date.now()}`
+    await adminService.createQueue({ name })
+    try {
+      await messagingService.sendMessage(name, { body: 'dead-letter me', bodyMode: 'text' })
+      const received = await messagingService.receiveMessages(name, 1, 'peekLock', 5000)
+      expect(received[0]?.handleId).toBeDefined()
+      await messagingService.deadLetterMessage(received[0].handleId!, 'count-test', 'test')
+      const dlq = buildDeadLetterQueuePath(name)
+      expect(await messagingService.countMessages(name, 250, 0)).toBe(0)
+      expect(await messagingService.countMessages(dlq, 250, 0)).toBe(1)
+      expect(await messagingService.peekMessages(dlq, 1, 0)).toHaveLength(1)
+      expect(await messagingService.countMessages(dlq, 250, 0)).toBe(1)
+    } finally {
+      await adminService.deleteQueue(name)
+    }
+  })
+
   test('countSubscriptionMessages counts messages fanned out to a subscription', async () => {
-    await messagingService.sendMessage(topicName, {
-      body: 'count me',
-      bodyMode: 'text',
-      messageId: 'msg-sub-count-1'
-    })
+    for (const suffix of [1, 2]) {
+      await messagingService.sendMessage(topicName, {
+        body: 'count me',
+        bodyMode: 'text',
+        messageId: `msg-sub-count-${suffix}`
+      })
+    }
 
     const count = await messagingService.countSubscriptionMessages(
       topicName,
@@ -236,7 +267,17 @@ describe('MessagingService — count methods', () => {
       250,
       0
     )
-    expect(count).toBeGreaterThanOrEqual(1)
+    expect(count).toBeGreaterThanOrEqual(2)
+    const first = await messagingService.peekSubscriptionMessages(topicName, subscriptionName, 1, 0)
+    await messagingService.countSubscriptionMessages(topicName, subscriptionName, 250, 0)
+    const next = await messagingService.peekSubscriptionMessages(
+      topicName,
+      subscriptionName,
+      1,
+      first[0].sequenceNumber + 1
+    )
+    expect(next).toHaveLength(1)
+    expect(next[0].messageId).not.toBe(first[0].messageId)
   })
 })
 
@@ -337,5 +378,25 @@ describe('MessagingService — receiveSubscriptionMessages', () => {
       true
     )
     expect(dlq.find((m) => m.messageId === 'msg-sub-rx-dlq-1')).toBeDefined()
+    expect(
+      await messagingService.countSubscriptionMessages(
+        rxTopicName,
+        rxSubscriptionName,
+        250,
+        0,
+        true
+      )
+    ).toBe(1)
+    expect(
+      await messagingService.countSubscriptionMessages(rxTopicName, rxSubscriptionName, 250, 0)
+    ).toBe(0)
+    const dlqAgain = await messagingService.peekSubscriptionMessages(
+      rxTopicName,
+      rxSubscriptionName,
+      1,
+      0,
+      true
+    )
+    expect(dlqAgain[0].messageId).toBe('msg-sub-rx-dlq-1')
   })
 })

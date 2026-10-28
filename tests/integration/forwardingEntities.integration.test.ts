@@ -1,6 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 import type { AdminService } from '../../src/main/services/adminService'
 import type { MessagingService } from '../../src/main/services/messagingService'
+import {
+  observeQueueCount,
+  observeSubscriptionCount
+} from '@renderer/lib/messageCount.ts'
 import { connectToTestEmulator, type TestEmulatorClient } from './testClient'
 
 // Regression coverage for auto-forwarding entities, pinned against the real emulator the
@@ -26,6 +30,8 @@ const targetQueue = `fwd-target-${Date.now()}`
 const sourceQueue = `fwd-source-${Date.now()}`
 const topicName = `fwd-topic-${Date.now()}`
 const forwardingSub = 'fwd-sub'
+const dlqSource = `fwd-dlq-source-${Date.now()}`
+const bothSource = `fwd-both-source-${Date.now()}`
 
 beforeAll(async () => {
   client = await connectToTestEmulator()
@@ -35,14 +41,79 @@ beforeAll(async () => {
   // forwardTo must point at an entity that already exists in the same namespace.
   await client.adminClient.createQueue(sourceQueue, { forwardTo: targetQueue })
   await client.adminClient.createSubscription(topicName, forwardingSub, { forwardTo: targetQueue })
+  await client.adminClient.createSubscription(topicName, 'regular')
+  await client.adminClient.createQueue(dlqSource, { forwardDeadLetteredMessagesTo: targetQueue })
+  await client.adminClient.createQueue(bothSource, {
+    forwardTo: targetQueue,
+    forwardDeadLetteredMessagesTo: targetQueue
+  })
+  await client.adminClient.createSubscription(topicName, 'dlq', {
+    forwardDeadLetteredMessagesTo: targetQueue
+  })
+  await client.adminClient.createSubscription(topicName, 'both', {
+    forwardTo: targetQueue,
+    forwardDeadLetteredMessagesTo: targetQueue
+  })
+  vi.stubGlobal('window', {
+    sbAdmin: {
+      messages: {
+        count: async (_profile: string, path: string, cap: number, cursor: number) => ({
+          ok: true,
+          data: await messagingService.countMessages(path, cap, cursor)
+        }),
+        countSubscription: async (
+          _profile: string,
+          topic: string,
+          sub: string,
+          cap: number,
+          cursor: number,
+          deadLetter: boolean
+        ) => ({
+          ok: true,
+          data: await messagingService.countSubscriptionMessages(
+            topic,
+            sub,
+            cap,
+            cursor,
+            deadLetter
+          )
+        })
+      }
+    }
+  })
 })
 
 afterAll(async () => {
   await messagingService.close()
   await client.adminClient.deleteQueue(sourceQueue).catch(() => {})
   await client.adminClient.deleteTopic(topicName).catch(() => {})
+  await client.adminClient.deleteQueue(dlqSource).catch(() => {})
+  await client.adminClient.deleteQueue(bothSource).catch(() => {})
   await client.adminClient.deleteQueue(targetQueue).catch(() => {})
   await client.close()
+  vi.unstubAllGlobals()
+})
+
+describe('count observation — forwarding eligibility from real broker metadata', () => {
+  test.each([
+    [targetQueue, 'regular', false, false],
+    [sourceQueue, forwardingSub, true, false],
+    [dlqSource, 'dlq', false, true],
+    [bothSource, 'both', true, true]
+  ] as const)(
+    'queue %s and subscription %s have independent active/DLQ eligibility',
+    async (name, subName, activeForwarding, dlqForwarding) => {
+      const queue = await adminService.getQueue(name)
+      const subscription = await adminService.getSubscription(topicName, subName)
+      for (const target of ['active', 'deadLetter'] as const) {
+        const expected = (target === 'active' ? activeForwarding : dlqForwarding)
+          ? 'unavailable'
+          : 'observed'
+        expect((await observeQueueCount('test', queue, target)).status).toBe(expected)
+        expect((await observeSubscriptionCount('test', subscription, target)).status).toBe(expected)
+      }
+    }
+  )
 })
 
 describe('AdminService — forwarding entities (admin path succeeds and exposes forwardTo)', () => {

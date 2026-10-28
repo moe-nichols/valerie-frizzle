@@ -1,66 +1,76 @@
-// The emulator's admin API returns no message-count data at all for queues or
-// subscriptions (confirmed: GET-queue response has no CountDetails/SizeInBytes, even with
-// real messages present — see the comment in adminService.ts), so every count in this app
-// comes from peeking instead. Peek is capped here rather than uncapped, so callers show
-// "N+" once the cap is hit instead of an exact count.
-export const PEEK_COUNT_CAP = 250
+import {
+  buildDeadLetterQueuePath,
+  type QueueDescription,
+  type SubscriptionDescription
+} from '@shared/domain'
+import type { IpcError, Result } from '@shared/errors'
 
-// Without an explicit fromSequenceNumber, Service Bus peek continues from wherever the
-// entity's peek cursor last was — a server-side, per-entity cursor shared across every
-// caller, not scoped to this component, connection, or even purpose (browsing vs.
-// counting). Passing 0 always re-peeks from the very first message regardless of any
-// prior peek activity elsewhere in the app — the only way to get a trustworthy count.
-export const PEEK_FROM_START = 0
+// Explicitly restart the emulator's shared peek cursor; reaching the cap is a lower bound.
+const OBSERVATION_CAP = 250
+const FROM_START = 0
 
 export interface MessageCountResult {
   count: number
   approximate: boolean
 }
 
-function toResult(count: number): MessageCountResult {
-  return { count, approximate: count === PEEK_COUNT_CAP }
+export type CountObservation =
+  | ({ status: 'observed' } & MessageCountResult)
+  | { status: 'unavailable'; reason: 'forwarding' }
+  | { status: 'failed'; error: IpcError }
+
+export type AvailableObservation = Exclude<CountObservation, { status: 'failed' }>
+export type CountTarget = 'active' | 'deadLetter'
+
+export function countEligibility(
+  description: QueueDescription | SubscriptionDescription,
+  target: CountTarget
+): Extract<CountObservation, { status: 'unavailable' }> | undefined {
+  const forwarding =
+    target === 'active' ? description.forwardTo : description.forwardDeadLetteredMessagesTo
+  return forwarding ? { status: 'unavailable', reason: 'forwarding' } : undefined
 }
 
-/** Returns `null` on failure — callers should show nothing rather than a misleading zero. */
-export async function fetchQueueMessageCount(
+function interpret(response: Result<number>): CountObservation {
+  return response.ok
+    ? { status: 'observed', count: response.data, approximate: response.data === OBSERVATION_CAP }
+    : { status: 'failed', error: response.error }
+}
+
+export async function observeQueueCount(
   profileId: string,
-  entityPath: string
-): Promise<MessageCountResult | null> {
-  const response = await window.sbAdmin.messages.count(
-    profileId,
-    entityPath,
-    PEEK_COUNT_CAP,
-    PEEK_FROM_START
+  queue: QueueDescription,
+  target: CountTarget
+): Promise<CountObservation> {
+  const unavailable = countEligibility(queue, target)
+  if (unavailable) return unavailable
+  return interpret(
+    await window.sbAdmin.messages.count(
+      profileId,
+      target === 'deadLetter' ? buildDeadLetterQueuePath(queue.name) : queue.name,
+      OBSERVATION_CAP,
+      FROM_START
+    )
   )
-  return response.ok ? toResult(response.data) : null
 }
 
-/** Dead-letter counterpart of {@link fetchQueueMessageCount}; the queue DLQ is addressed by
- * its path suffix (see `buildDeadLetterQueuePath`). */
-export async function fetchQueueDeadLetterCount(
+export async function observeSubscriptionCount(
   profileId: string,
-  deadLetterEntityPath: string
-): Promise<MessageCountResult | null> {
-  return fetchQueueMessageCount(profileId, deadLetterEntityPath)
-}
-
-/** Returns `null` on failure — callers should show nothing rather than a misleading zero.
- * Pass `deadLetter` to count the subscription's dead-letter sub-queue instead. */
-export async function fetchSubscriptionMessageCount(
-  profileId: string,
-  topicName: string,
-  subscriptionName: string,
-  deadLetter = false
-): Promise<MessageCountResult | null> {
-  const response = await window.sbAdmin.messages.countSubscription(
-    profileId,
-    topicName,
-    subscriptionName,
-    PEEK_COUNT_CAP,
-    PEEK_FROM_START,
-    deadLetter
+  subscription: SubscriptionDescription,
+  target: CountTarget
+): Promise<CountObservation> {
+  const unavailable = countEligibility(subscription, target)
+  if (unavailable) return unavailable
+  return interpret(
+    await window.sbAdmin.messages.countSubscription(
+      profileId,
+      subscription.topicName,
+      subscription.subscriptionName,
+      OBSERVATION_CAP,
+      FROM_START,
+      target === 'deadLetter'
+    )
   )
-  return response.ok ? toResult(response.data) : null
 }
 
 export function formatMessageCount(result: MessageCountResult): string {

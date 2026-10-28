@@ -1,14 +1,19 @@
 import { ConfirmDialog } from '@renderer/components/ConfirmDialog'
 import { Button } from '@renderer/components/ui/button'
-import { PEEK_COUNT_CAP, PEEK_FROM_START } from '@renderer/lib/messageCount'
+import {
+  type CountTarget,
+  formatMessageCount,
+  type MessageCountResult,
+  observeQueueCount
+} from '@renderer/lib/messageCount'
+import { buildDeadLetterQueuePath, type QueueDescription } from '@shared/domain'
 import { useEffect, useRef, useState } from 'react'
 
 interface QueuePurgeControlProps {
   profileId: string
-  entityPath: string
-  /** Defaults to `entityPath` — pass a friendlier label when purging a DLQ
-   * (`entityPath` there is the raw `queueName/$DeadLetterQueue` path). */
-  displayName?: string
+  queue: QueueDescription | null
+  queueName: string
+  target: CountTarget
 }
 
 interface PurgeProgressState {
@@ -17,15 +22,27 @@ interface PurgeProgressState {
   stoppedAtCap: boolean
 }
 
-export function QueuePurgeControl({
+export function QueuePurgeControl(props: QueuePurgeControlProps): React.JSX.Element {
+  return (
+    <QueuePurgeSession
+      key={JSON.stringify([props.profileId, props.queueName, props.target])}
+      {...props}
+    />
+  )
+}
+
+function QueuePurgeSession({
   profileId,
-  entityPath,
-  displayName
+  queue,
+  queueName,
+  target
 }: QueuePurgeControlProps): React.JSX.Element {
-  const label = displayName ?? entityPath
+  const entityPath = target === 'deadLetter' ? buildDeadLetterQueuePath(queueName) : queueName
+  const label = target === 'deadLetter' ? `${queueName} DLQ` : queueName
   const [confirming, setConfirming] = useState(false)
-  const [messageCount, setMessageCount] = useState<number | null>(null)
-  const [messageCountIsApproximate, setMessageCountIsApproximate] = useState(false)
+  const [messageCount, setMessageCount] = useState<MessageCountResult | null>(null)
+  const [estimating, setEstimating] = useState(false)
+  const lifetime = useRef<object>({})
   // Drives the whole "in progress or just finished" UI by itself — no separate
   // `purging` boolean. A prior version cleared `purging` in the same state update as the
   // final `done: true` progress event, so React batched both into one render where
@@ -45,31 +62,40 @@ export function QueuePurgeControl({
     unsubscribeRef.current = null
   }
 
-  // A purge and its progress belong to one entity: switching entities mid-purge (the
-  // control is not keyed) must not show the old queue's progress against the new one.
+  // The keyed session isolates visible state; pending estimates also lose permission on teardown.
   useEffect(() => {
-    setConfirming(false)
-    setMessageCount(null)
-    setMessageCountIsApproximate(false)
-    setProgress(null)
-    setError(null)
-    return stopListening
-  }, [profileId, entityPath])
+    return () => {
+      lifetime.current = {}
+      stopListening()
+    }
+  }, [])
 
   async function handlePurgeClick(): Promise<void> {
+    if (!queue || estimating) return
+    const token = lifetime.current
+    setEstimating(true)
     setError(null)
-    const response = await window.sbAdmin.messages.peek(
-      profileId,
-      entityPath,
-      PEEK_COUNT_CAP,
-      PEEK_FROM_START
-    )
-    if (response.ok) {
-      setMessageCount(response.data.length)
-      setMessageCountIsApproximate(response.data.length === PEEK_COUNT_CAP)
-      setConfirming(true)
-    } else {
-      setError(response.error.message)
+    try {
+      const observation = await observeQueueCount(profileId, queue, target)
+      if (lifetime.current !== token) return
+      if (observation.status === 'observed') {
+        setMessageCount(observation)
+        setConfirming(true)
+      } else {
+        setError(
+          observation.status === 'failed'
+            ? `Unable to estimate messages: ${observation.error.message}. Retry Purge after resolving the error.`
+            : 'Forwarding prevents estimating these messages. Disable forwarding and retry Purge.'
+        )
+      }
+    } catch (error) {
+      if (lifetime.current === token) {
+        setError(
+          `Unable to estimate messages: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+    } finally {
+      if (lifetime.current === token) setEstimating(false)
     }
   }
 
@@ -106,21 +132,25 @@ export function QueuePurgeControl({
   function handleCancel(): void {
     setConfirming(false)
     setMessageCount(null)
-    setMessageCountIsApproximate(false)
   }
 
   function handleDismissProgress(): void {
     setProgress(null)
   }
 
-  const countLabel = messageCountIsApproximate ? `${messageCount}+` : `${messageCount}`
+  const countLabel = messageCount ? formatMessageCount(messageCount) : ''
 
   return (
     <span className="inline-flex items-center gap-2">
       {error && <span className="text-destructive text-sm">{error}</span>}
       {!confirming && !progress && (
-        <Button variant="outline" size="sm" onClick={handlePurgeClick}>
-          Purge
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handlePurgeClick}
+          disabled={!queue || estimating}
+        >
+          {estimating ? 'Estimating…' : 'Purge'}
         </Button>
       )}
 
@@ -128,7 +158,7 @@ export function QueuePurgeControl({
         open={confirming}
         onOpenChange={(open) => !open && handleCancel()}
         title="Purge messages?"
-        description={`Delete all ${countLabel} active message${messageCount === 1 ? '' : 's'} in "${label}"?`}
+        description={`Delete all ${countLabel} active message${messageCount?.count === 1 ? '' : 's'} in "${label}"?`}
         confirmLabel={`Yes, purge ${countLabel}`}
         onConfirm={handleConfirmPurge}
       />

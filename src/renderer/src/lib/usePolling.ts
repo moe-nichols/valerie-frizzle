@@ -30,8 +30,18 @@ export function usePolling(
   const runningRef = useRef(false)
   const rerunRef = useRef(false)
   const rerunViaPollRef = useRef(true)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      rerunRef.current = false
+    }
+  }, [])
 
   const refresh = useCallback(async (viaPoll = false): Promise<void> => {
+    if (!mountedRef.current) return
     if (runningRef.current) {
       rerunRef.current = true
       rerunViaPollRef.current = rerunViaPollRef.current && viaPoll
@@ -45,7 +55,7 @@ export function usePolling(
         rerunViaPollRef.current = true
         await callbackRef.current(currentViaPoll)
         currentViaPoll = rerunViaPollRef.current
-      } while (rerunRef.current)
+      } while (mountedRef.current && rerunRef.current)
     } finally {
       runningRef.current = false
     }

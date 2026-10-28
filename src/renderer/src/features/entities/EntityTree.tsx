@@ -8,13 +8,13 @@ import {
 } from '@renderer/store/connectionsSlice'
 import { useAppDispatch, useAppSelector } from '@renderer/store/hooks'
 import type { QueueDescription, TopicDescription } from '@shared/domain'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { CreateQueueDialog, CreateTopicDialog } from './CreateEntityDialog'
 import { EditQueueDialog, EditTopicDialog } from './EditEntityDialogs'
 import { EntityCountBadges } from './EntityCountBadges'
 import { EntityTreeSection } from './EntityTreeSection'
-import { useEntityTreeData } from './useEntityTreeData'
+import { useEntityTreeData } from './useEntityRefresh'
 
 interface EntityTreeProps {
   profileId: string
@@ -30,8 +30,12 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
   const activeQueueName = useAppSelector((state) => state.connections.activeQueueName)
   const activeTopicName = useAppSelector((state) => state.connections.activeTopicName)
 
-  const { queues, topics, queueCounts, queueDlqCounts, error, setError, loaded, refresh } =
+  const { queues, topics, queueCounts, queueDlqCounts, error, loaded, refresh } =
     useEntityTreeData(profileId)
+  const [mutationError, setMutationError] = useState<string | null>(null)
+  useEffect(() => {
+    setMutationError(null)
+  }, [profileId])
 
   const [createQueueOpen, setCreateQueueOpen] = useState(false)
   const [createTopicOpen, setCreateTopicOpen] = useState(false)
@@ -41,6 +45,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
 
   async function handleConfirmDelete(): Promise<void> {
     if (!deleting) return
+    setMutationError(null)
     const { kind, name } = deleting
     setDeleting(null)
 
@@ -56,15 +61,15 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
       toast.success(`Deleted ${kind} "${name}"`)
       await refresh()
     } else {
-      setError(response.error.message)
+      setMutationError(response.error.message)
     }
   }
 
   return (
     <>
-      {error && (
+      {(mutationError || error) && (
         <Alert variant="destructive" className="mx-2 mb-1 w-auto">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{mutationError || error}</AlertDescription>
         </Alert>
       )}
 
@@ -84,7 +89,6 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
           <EntityCountBadges
             active={queueCounts[queue.name]}
             deadLetter={queueDlqCounts[queue.name]}
-            forwarding={Boolean(queue.forwardTo)}
           />
         )}
       />
@@ -120,7 +124,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         <EditQueueDialog
           profileId={profileId}
           queue={editingQueue}
-          open={editingQueue !== null}
+          open={true}
           onOpenChange={(nextOpen) => !nextOpen && setEditingQueue(null)}
           onUpdated={refresh}
         />
@@ -129,7 +133,7 @@ export function EntityTree({ profileId }: EntityTreeProps): React.JSX.Element {
         <EditTopicDialog
           profileId={profileId}
           topic={editingTopic}
-          open={editingTopic !== null}
+          open={true}
           onOpenChange={(nextOpen) => !nextOpen && setEditingTopic(null)}
           onUpdated={refresh}
         />

@@ -2,7 +2,7 @@
 
 import { renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { usePolling } from '../../src/renderer/src/lib/usePolling'
+import { usePolling } from '@renderer/lib/usePolling.ts'
 
 /** A callback whose completion the test controls. */
 function deferredCallback(): { callback: () => Promise<void>; resolveNext: () => Promise<void> } {
@@ -33,6 +33,44 @@ afterEach(() => {
 })
 
 describe('usePolling', () => {
+  test('interval changes replace the timer without suppressing manual refresh with null', async () => {
+    const callback = vi.fn()
+    const { result, rerender } = renderHook(({ interval }) => usePolling(callback, interval), {
+      initialProps: { interval: 1000 as number | null }
+    })
+    await vi.advanceTimersByTimeAsync(500)
+    rerender({ interval: 2000 })
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(callback).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(500)
+    expect(callback).toHaveBeenCalledTimes(1)
+    rerender({ interval: null })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(callback).toHaveBeenCalledTimes(1)
+    await result.current()
+    expect(callback).toHaveBeenCalledTimes(2)
+  })
+
+  test('a rejected callback releases the execution guard', async () => {
+    const callback = vi.fn().mockRejectedValueOnce(new Error('failed')).mockResolvedValue(undefined)
+    const { result } = renderHook(() => usePolling(callback, null))
+    await expect(result.current()).rejects.toThrow('failed')
+    await result.current()
+    expect(callback).toHaveBeenCalledTimes(2)
+  })
+
+  test('unmount drops a queued manual refresh even if pending work later settles', async () => {
+    const { callback, resolveNext } = deferredCallback()
+    const { result, unmount } = renderHook(() => usePolling(callback, 1000))
+    const first = result.current()
+    await result.current()
+    unmount()
+    await resolveNext()
+    await first
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(callback).toHaveBeenCalledTimes(1)
+  })
+
   test('a null interval ("not ready") never polls', async () => {
     const callback = vi.fn()
     renderHook(() => usePolling(callback, null))

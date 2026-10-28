@@ -205,10 +205,9 @@ src/renderer/src/
     EmptyState.tsx                 # the muted "nothing here" one-liner
   lib/
     monaco.ts                      # Monaco worker setup, local-bundle loader config
-    messageCount.ts                # shared peek-based count fetching (queues + subscriptions)
+    messageCount.ts                # count observation: eligibility, addressing, cap/cursor, explicit outcomes
     usePolling.ts                  # interval + guarded manual refresh (one in-flight guard for both)
-    useIsCurrent.ts                # stale-async-result predicate for the un-keyed panels
-    useEntityCounts.ts             # per-entity count map with keep-previous-on-failure merging
+    useIsCurrent.ts                # currency predicate still used by browsing/rule workflows
     useAsyncSubmit.ts              # form submission lifecycle: double-submit guard + error state
     parseEnum.ts                   # narrows Select/RadioGroup string values without `as`-casts
   store/
@@ -222,12 +221,11 @@ src/renderer/src/
     entities/
       EntityTree.tsx               # sidebar-nested queues/topics under the selected connection
       EntityTreeSection.tsx        # one generic Queues/Topics section (header, rows, actions menu)
-      useEntityTreeData.ts         # the tree's data layer: listings + counts + polling, staleness-guarded
+      useEntityRefresh.ts          # selection-scoped tree/queue/topic data, partial publication, count retention
       CreateEntityDialog.tsx       # one parameterized add-queue/add-topic dialog
       EditEntityDialogs.tsx        # edit queue/topic/subscription — configuration over one generic dialog
       entityFields.tsx             # Text/Number/Checkbox field primitives for entity forms
       entityForms.tsx              # FieldsState objects + field groups + DTO converters per entity kind
-      useEntityPanel.ts            # shared panel scaffolding: poll wiring + reset-on-selection-change
       PanelRefreshControls.tsx     # refresh button + "Updated {time}" pair for panel titles
       EntityCountBadges.tsx        # active/DLQ count badge pair
       QueuePanel.tsx               # queue detail: status, purge, send/browse/DLQ
@@ -262,16 +260,18 @@ Two components are deliberately generalized rather than duplicated for DLQ use:
 - `QueuePurgeControl` takes `entityPath` + an optional `displayName`, so the exact same
   component purges either a regular queue or its DLQ.
 
-`QueuePanel` wires the DLQ UI in by simply rendering a second `MessageBrowser` +
-`QueuePurgeControl` pair pointed at `buildDeadLetterQueuePath(queueName)` — no
-DLQ-specific component exists anywhere in the renderer.
+`QueuePanel` renders a second `MessageBrowser` pointed at
+`buildDeadLetterQueuePath(queueName)`. Purge controls receive queue metadata and an
+explicit active/DLQ target. They request a fresh scalar count observation before
+confirmation, blocking confirmation with an inline explanation if observation fails
+or forwarding prevents it. Initial metadata must load before estimation is enabled.
 
 ## Polling, not push
 
 Queue/topic existence and message counts are kept in sync with the emulator by polling,
-not a push channel — `usePolling(callback, intervalMs)` wraps a plain `setInterval`,
-used independently by `EntityTree` (queue/topic list), `QueuePanel` (one queue's detail +
-count), and `TopicPanel` (one topic's detail + its subscriptions' counts). The interval
+not a push channel. `features/entities/useEntityRefresh.ts` owns selection-local data
+for the tree, queue panel, and topic panel around the existing
+`usePolling(callback, intervalMs)` scheduler. The interval
 comes from `settingsSlice`'s `pollIntervalMs` (`null` until the persisted preference
 loads, so nothing polls at a guessed default before the real value arrives), editable via
 the Settings dialog (`features/settings/`) and persisted through the same
@@ -290,17 +290,36 @@ Two reasons this is simpler than a push channel:
   closes an open panel for that entity automatically. Keeping the rule in the slice means
   the component never has to diff old state against new.
 
-Message counts are peek-based (see [Emulator quirks](#emulator-quirks-and-workarounds)
-below — there's no real count API), which means polling for counts **shares the same
-per-entity peek cursor** as manual browsing in `MessageBrowser`. Every count-fetch
-(`lib/messageCount.ts`) explicitly passes `fromSequenceNumber: 0` to get a trustworthy
-count each time, but that also means background polling keeps resetting the shared
-cursor — a user paging through `MessageBrowser`'s peek while polling is active will
-always see "from the start" rather than advancing. `MessageBrowser` doesn't do
-cursor-based pagination today regardless (each "Peek" click just shows the latest batch
-from wherever the cursor is), so this isn't a regression so much as an existing quirk
-that polling now also participates in. Not solved here — worth knowing if it's ever
-surprising during a driven-UI check.
+Each mounted refresh owner serializes executions, including across selection changes.
+Timer ticks during a run are skipped; manual/post-mutation requests coalesce into one
+follow-up with manual error presentation taking precedence. A changed selection resets
+visible data immediately, invalidates the old lifetime (including A -> B -> A), and
+queues the latest selection after pending work settles. Unmount stops timers and
+discards publications and queued work; interval changes do not reset data.
+
+Metadata branches publish independently. Only successful current listings reconcile
+Redux selection; failed listings retain previous data and represent unknown membership.
+Initial/manual metadata errors appear inline; timer failures toast without replacing
+an inline error. Tree loading ends when initial metadata settles, and panel timestamps
+advance when all required metadata succeeds, without waiting for counts.
+
+`lib/messageCount.ts` owns queue/subscription observation eligibility and addressing.
+Active forwarding and DLQ forwarding are independent; only eligible requested targets
+are observed. Outcomes distinguish observed values, forwarding-unavailable, and failed
+observations retaining the original structured IPC error. The refresh owner retains
+previous same-lifetime counts on failure, removes deleted targets on successful listings,
+and replaces numeric observations immediately when forwarding is enabled.
+
+Counts are non-destructive, capped peek observations, not durable totals. The module
+always uses a cap of 250 and `fromSequenceNumber: 0`; reaching the cap displays `250+`.
+SDK message bodies remain in main: existing `messages:count` and
+`messages:countSubscription` channels return only scalar numbers, including for purge
+estimates. Unexpected rejected promises follow the owning refresh error path.
+
+The emulator **shares per-entity peek cursors** between count observation and browsing.
+`MessageBrowser` supports pagination: Load more supplies an explicit sequence number,
+so interleaved count requests do not force that browser operation back to the start.
+Do not assume the broker gives every receiver an isolated cursor.
 
 One known cost: because there is no real count API, each poll tick issues one capped
 peek (up to 250 messages, main-process-side only) **per visible entity** — an N+1 burst
@@ -318,8 +337,8 @@ touching related code, read the relevant one first.
 | Admin client hardcodes HTTPS; emulator's management API is plain HTTP only                                                                                                                                                                                             | `adminHttpsProxy.ts` — see [above](#admin-api-vs-messaging-api-and-the-https-proxy-workaround)                                                                                                                                                       |
 | `updateQueue`/`updateTopic`/`updateSubscription` throw a client-side `PARSE_ERROR` even when the update **succeeds server-side** — the PUT response is missing several fields (`SizeInBytes`, `CreatedAt`, `AuthorizationRules`, etc.) the SDK's deserializer requires | `adminService.ts`'s `runUpdateWithEmulatorParseWorkaround()` — catches specifically `err.code === 'PARSE_ERROR'`, treats it as success, and re-fetches. Any other error still propagates normally.                                                   |
 | `maxSizeInMegabytes` is silently ignored by the emulator at both create and update time (always comes back as the default 100)                                                                                                                                         | Not worked around — just don't rely on it. `maxDeliveryCount`/`defaultMessageTimeToLive` both apply correctly and are used instead where a "does this actually change" test is needed.                                                               |
-| The emulator's GET-queue response has **no** `CountDetails`/`SizeInBytes`/`AccessedAt` at all (confirmed even with real messages present) — there is no working queue-stats API, for queues *or* subscriptions                                                        | `adminService.ts` has no `getActiveMessageCount` method at all (removed after confirming this — see the comment at the top of the class). All message counts in the app — the purge confirmation dialog, the sidebar tree, both detail panels — come from a capped `MessagingService.peekMessages()`/`peekSubscriptionMessages()` call instead (`lib/messageCount.ts`), shown as "N+" once the cap is hit. |
-| `peekMessages()` without an explicit `fromSequenceNumber` continues from wherever the entity's peek cursor **last was** — a cursor shared across every caller of that entity, not scoped to the current component or connection                                        | Anywhere peek is used to get a fresh count (not just to browse), pass `fromSequenceNumber: 0` explicitly (`lib/messageCount.ts`'s `PEEK_FROM_START`). This now includes poll-driven count-fetching — see [Polling, not push](#polling-not-push) above for the resulting interaction with manual browsing. |
+| The emulator's GET-queue response has **no** `CountDetails`/`SizeInBytes`/`AccessedAt` at all (confirmed even with real messages present) — there is no working queue-stats API, for queues *or* subscriptions | All count observations use capped `MessagingService.countMessages()`/`countSubscriptionMessages()` via scalar IPC (`lib/messageCount.ts`), shown as "N+" at the cap; message descriptions are not transferred for counting. |
+| `peekMessages()` without an explicit `fromSequenceNumber` continues from wherever the entity's peek cursor **last was** — shared across callers | Count observation always supplies zero; browser pagination supplies its own explicit sequence number. See [Polling, not push](#polling-not-push). |
 | Peeking a **subscription** requires a distinct two-arg SDK call (`createReceiver(topicName, subscriptionName)`), not the single-path `createReceiver(entityPath)` a queue or DLQ uses                                                                                 | `MessagingService.peekSubscriptionMessages()` / `messages:peekSubscription` — see [above](#peeking-a-subscription-is-not-peeking-a-queue).                                                                                                          |
 | Every new subscription gets an auto-created `$Default` rule (`SqlRuleFilter`, `sqlExpression: "1=1"`)                                                                                                                                                                  | Not a bug — just don't write code or tests that assume a fresh subscription has zero rules.                                                                                                                                                          |
 | A dead-letter sub-queue has no dedicated SDK surface, but its entity path is just `"<name>/$DeadLetterQueue"`                                                                                                                                                          | `buildDeadLetterQueuePath()` in `shared/domain.ts` — see [above](#dlq-handling-is-just-a-different-entity-path).                                                                                                                                     |

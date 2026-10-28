@@ -179,7 +179,7 @@ export class MessagingService {
       return project(messages)
     } catch (err) {
       // Defense in depth: the renderer already skips the count for auto-forwarding entities
-      // (it reads forwardTo — see EntityCountBadges/useEntityTreeData), but if any path still
+      // (see the renderer's messageCount module), but if any path still
       // peeks one, turn the SDK's opaque error into a clear, actionable one. Mirrors
       // drainReceiver's explicit catch/close/rethrow rather than relying on `finally` alone.
       if (isAutoForwardBrowseError(err)) {

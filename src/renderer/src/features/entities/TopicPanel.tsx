@@ -11,11 +11,9 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { Skeleton } from '@renderer/components/ui/skeleton'
-import { fetchSubscriptionMessageCount } from '@renderer/lib/messageCount'
 import { useAsyncSubmit } from '@renderer/lib/useAsyncSubmit'
-import { useEntityCounts } from '@renderer/lib/useEntityCounts'
-import type { SubscriptionDescription, TopicDescription } from '@shared/domain'
-import { useState } from 'react'
+import type { SubscriptionDescription } from '@shared/domain'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { MessageComposer } from '../messages/MessageComposer'
 import { EditSubscriptionDialog } from './EditEntityDialogs'
@@ -28,7 +26,7 @@ import {
 import { PanelRefreshControls } from './PanelRefreshControls'
 import { SubscriptionMessages } from './SubscriptionMessages'
 import { SubscriptionRules } from './SubscriptionRules'
-import { reportRefreshError, useEntityPanel } from './useEntityPanel'
+import { useTopicPanelData } from './useEntityRefresh'
 
 interface TopicPanelProps {
   profileId: string
@@ -36,20 +34,19 @@ interface TopicPanelProps {
 }
 
 export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX.Element {
-  const [topic, setTopic] = useState<TopicDescription | null>(null)
-  const [subscriptions, setSubscriptions] = useState<SubscriptionDescription[]>([])
   const {
-    counts: subscriptionCounts,
-    updateCounts: updateSubscriptionCounts,
-    resetCounts: resetSubscriptionCounts
-  } = useEntityCounts()
-  const {
-    counts: subscriptionDlqCounts,
-    updateCounts: updateSubscriptionDlqCounts,
-    resetCounts: resetSubscriptionDlqCounts
-  } = useEntityCounts()
-  const [error, setError] = useState<string | null>(null)
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
+    topic,
+    subscriptions,
+    subscriptionCounts,
+    subscriptionDlqCounts,
+    error,
+    lastRefreshed,
+    refresh
+  } = useTopicPanelData(profileId, topicName)
+  const [mutationError, setMutationError] = useState<string | null>(null)
+  useEffect(() => {
+    setMutationError(null)
+  }, [profileId, topicName])
   const [newSubscriptionName, setNewSubscriptionName] = useState('')
   const [newSubscriptionFields, setNewSubscriptionFields] = useState(emptySubscriptionFields)
   const [newSubscriptionAdvancedOpen, setNewSubscriptionAdvancedOpen] = useState(false)
@@ -57,76 +54,6 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
     null
   )
   const [deletingSubscription, setDeletingSubscription] = useState<string | null>(null)
-
-  const { isCurrent, refresh } = useEntityPanel(
-    `${profileId}::${topicName}`,
-    (viaPoll) => refreshAll(viaPoll),
-    () => {
-      setTopic(null)
-      setSubscriptions([])
-      resetSubscriptionCounts()
-      resetSubscriptionDlqCounts()
-      setError(null)
-      setLastRefreshed(null)
-    }
-  )
-
-  // The two refreshers report their error rather than writing shared `error` state
-  // directly, so the combined refresh can set it once — otherwise one branch's success
-  // could clobber the other branch's failure (they run concurrently). They also bail out
-  // once a newer selection has superseded this one, so stale data can't land in the panel.
-  async function refreshTopic(): Promise<string | null> {
-    const response = await window.sbAdmin.entities.topics.get(profileId, topicName)
-    if (!isCurrent()) return null
-    if (!response.ok) return response.error.message
-    setTopic(response.data)
-    return null
-  }
-
-  async function refreshSubscriptions(): Promise<string | null> {
-    const response = await window.sbAdmin.entities.subscriptions.list(profileId, topicName)
-    if (!isCurrent()) return null
-    if (!response.ok) return response.error.message
-    setSubscriptions(response.data)
-
-    // An auto-forwarding subscription can't be peeked (a permanent Service Bus limitation),
-    // so skip its count fetch; the badge shows "forwarding" instead (see EntityCountBadges).
-    // The DLQ is gated on its own forwardDeadLetteredMessagesTo, independent of forwardTo.
-    const activeCountNames = response.data
-      .filter((subscription) => !subscription.forwardTo)
-      .map((subscription) => subscription.subscriptionName)
-    const dlqCountNames = response.data
-      .filter((subscription) => !subscription.forwardDeadLetteredMessagesTo)
-      .map((subscription) => subscription.subscriptionName)
-    await Promise.all([
-      updateSubscriptionCounts(
-        activeCountNames,
-        (name) => fetchSubscriptionMessageCount(profileId, topicName, name),
-        isCurrent
-      ),
-      updateSubscriptionDlqCounts(
-        dlqCountNames,
-        (name) => fetchSubscriptionMessageCount(profileId, topicName, name, true),
-        isCurrent
-      )
-    ])
-    return null
-  }
-
-  async function refreshAll(viaPoll = false): Promise<void> {
-    const [topicError, subscriptionError] = await Promise.all([
-      refreshTopic(),
-      refreshSubscriptions()
-    ])
-    if (!isCurrent()) return
-    const err = topicError ?? subscriptionError
-    if (!err) {
-      setError(null)
-      setLastRefreshed(new Date())
-    } else {
-      reportRefreshError(`Failed to refresh ${topicName}: ${err}`, viaPoll, setError)
-    }
-  }
 
   const createSubscription = useAsyncSubmit(
     () =>
@@ -144,6 +71,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
   )
 
   async function handleDeleteSubscription(subscriptionName: string): Promise<void> {
+    setMutationError(null)
     const response = await window.sbAdmin.entities.subscriptions.delete(
       profileId,
       topicName,
@@ -153,7 +81,7 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
       toast.success(`Deleted subscription "${subscriptionName}"`)
       await refresh()
     } else {
-      setError(response.error.message)
+      setMutationError(response.error.message)
     }
   }
 
@@ -171,9 +99,9 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
         )}
       </CardHeader>
       <CardContent className="space-y-6">
-        {error && (
+        {(mutationError || error) && (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{mutationError || error}</AlertDescription>
           </Alert>
         )}
         {!topic && !error && (
@@ -209,7 +137,6 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
                     active={subscriptionCounts[subscription.subscriptionName]}
                     deadLetter={subscriptionDlqCounts[subscription.subscriptionName]}
                     activeSuffix=" active"
-                    forwarding={Boolean(subscription.forwardTo)}
                   />
                   <Button
                     variant="outline"
@@ -299,9 +226,9 @@ export function TopicPanel({ profileId, topicName }: TopicPanelProps): React.JSX
         <EditSubscriptionDialog
           profileId={profileId}
           subscription={editingSubscription}
-          open={editingSubscription !== null}
+          open={true}
           onOpenChange={(nextOpen) => !nextOpen && setEditingSubscription(null)}
-          onUpdated={async () => setError(await refreshSubscriptions())}
+          onUpdated={refresh}
         />
       )}
     </Card>
